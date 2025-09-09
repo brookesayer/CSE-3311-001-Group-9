@@ -1,0 +1,27 @@
+Python
+pycache/
+*.pyc
+*.pyo
+*.pyd
+.Python
+env/
+venv/
+pip-log.txt
+pip-delete-this-directory.txt
+.tox/
+.nox/
+.eggs/
+*.egg-info/
+*.egg
+
+Environment variables
+.env
+.venv
+env.bak
+.envrc
+
+IDE / Editor specific
+.vscode/
+.idea/
+*.swp
+*.swo
