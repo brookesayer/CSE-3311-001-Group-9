@@ -1,6 +1,0 @@
-Flask
-psycopg2-binary
-python-dotenv
-Flask-Cors
-gunicorn
-#pip install -r requirement.txt
