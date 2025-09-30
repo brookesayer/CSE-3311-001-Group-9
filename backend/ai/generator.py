@@ -30,20 +30,30 @@ def generate_places(category: str, city: str = "Arlington, TX") -> List[Dict]:
     client = OpenAI(api_key=OPENAI_API_KEY)
 
     system = (
-        "You are a data generator. Return STRICT JSON array. "
-        "Each item must have keys: name, category, short_description, address, lat, lon. "
-        "Use Arlington, TX context. If lat/lon unknown, set null."
+        "You are a travel data generator. Return STRICT JSON array. "
+        "Each item must have keys: name, category, description, address, lat, lon. "
+        "Descriptions should be short and realistic. "
+        "Avoid national or global chains (e.g., McDonald's, Starbucks). "
+        "Focus on independent, local businesses or unique regional favorites. "
+        "Always include latitude/longitude in decimal degrees when possible."
     )
+
     user = (
-        f"List 10 relevant {category} in {city}. "
-        "Return ONLY the JSON array, no extra text."
+        f"List 10 independent, non-chain {category} in {city}. "
+        "Include only local spots, not corporate franchises. "
+        "Return ONLY the JSON array."
     )
 
     resp = client.chat.completions.create(
         model="gpt-4o-mini",
-        messages=[{"role":"system","content":system},{"role":"user","content":user}],
-        temperature=0.2,
+        messages=[
+            {"role": "system", "content": system},
+            {"role": "user", "content": user},
+        ],
+        temperature=0.3,
     )
+    
+
     content = resp.choices[0].message.content
 
     # try to extract an array

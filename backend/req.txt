@@ -3,4 +3,3 @@ uvicorn[standard]
 sqlalchemy>=2.0
 pydantic>=2.5
 python-dotenv
-openai
