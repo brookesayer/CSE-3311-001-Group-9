@@ -1,3 +1,5 @@
+# backend/ai/generator.py
+
 import os, json, re
 from typing import List, Dict
 
@@ -15,8 +17,8 @@ def _fallback(category: str, city: str) -> List[Dict]:
             "name": f"{x['name']} ({category})",
             "category": category,
             "short_description": f"{category.title()} spot in {city}",
-            "address": x["address"],
-            "lat": None,
+            "address": x["address"],   # provide address when known
+            "lat": None,               # leave coords optional; enrichment may fill
             "lon": None,
         }
         for x in base
@@ -35,7 +37,8 @@ def generate_places(category: str, city: str = "Arlington, TX") -> List[Dict]:
         "Descriptions should be short and realistic. "
         "Avoid national or global chains (e.g., McDonald's, Starbucks). "
         "Focus on independent, local businesses or unique regional favorites. "
-        "Always include latitude/longitude in decimal degrees when possible."
+        "Always include a valid postal address (street, city, state, postal code). "
+        "Latitude/longitude are optional and may be null."
     )
 
     user = (
@@ -52,11 +55,23 @@ def generate_places(category: str, city: str = "Arlington, TX") -> List[Dict]:
         ],
         temperature=0.3,
     )
-    
 
     content = resp.choices[0].message.content
 
     # try to extract an array
     m = re.search(r"\[\s*{.*}\s*\]", content, flags=re.S)
     arr_text = m.group(0) if m else content
-    return json.loads(arr_text)
+    data = json.loads(arr_text)
+
+    # normalize: ensure keys exist; allow lat/lon to be None
+    normalized: List[Dict] = []
+    for item in data:
+        normalized.append({
+            "name": item.get("name"),
+            "category": item.get("category") or category,
+            "description": item.get("description") or item.get("short_description") or "",
+            "address": item.get("address"),      # required by prompt; enrichment will verify/fix if needed
+            "lat": item.get("lat"),
+            "lon": item.get("lon"),
+        })
+    return normalized

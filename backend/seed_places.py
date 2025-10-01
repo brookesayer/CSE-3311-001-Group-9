@@ -1,4 +1,5 @@
 # backend/seed_places.py
+
 from typing import List
 import time
 import argparse
@@ -35,7 +36,9 @@ def seed_places(categories: List[str], city: str = "Arlington, TX", replace: boo
     - categories: list of category names to generate
     - city: default city context
     - replace: if True, wipe all existing rows first
-    Returns total inserted rows.
+
+    CHANGE: address is OPTIONAL at seed time; enrichment will fetch correct addresses
+    via Google Maps APIs later.
     """
     Base.metadata.create_all(bind=engine)
     inserted_total = 0
@@ -56,23 +59,31 @@ def seed_places(categories: List[str], city: str = "Arlington, TX", replace: boo
             try:
                 for p in items:
                     name = (p.get("name") or "").strip()
-                    address = (p.get("address") or "").strip()
-                    if not name or not address:
+                    if not name:
                         continue
 
-                    # skip if exists
-                    exists = db.query(Place).filter_by(name=name, address=address).first()
+                    address = (p.get("address") or "").strip() or None
+
+                    # skip if exists:
+                    #   if we have an address → dedupe by (name,address)
+                    #   else (no address yet) → dedupe by (name, category, city) heuristics
+                    if address:
+                        exists = db.query(Place).filter_by(name=name, address=address).first()
+                    else:
+                        exists = (db.query(Place)
+                                  .filter(Place.name == name)
+                                  .filter(Place.category == (p.get("category") or cat))
+                                  .first())
                     if exists:
                         continue
 
-                    # prefer description → short_description
                     description = p.get("description") or p.get("short_description") or ""
 
                     db.add(Place(
                         name=name,
                         category=p.get("category") or cat,
                         description=description,
-                        address=address,
+                        address=address,  # may be None; enrichment fills later
                         lat=p.get("lat"),
                         lon=p.get("lon"),
                     ))

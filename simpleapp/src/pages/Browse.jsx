@@ -3,25 +3,44 @@ import CategoryChips from '../components/CategoryChips';
 import PlaceCard from '../components/PlaceCard';
 import Toast from '../components/Toast';
 import { storage } from '../lib/storage';
-import placesData from '../data/places.json';
 import { MagnifyingGlassIcon, AdjustmentsHorizontalIcon } from '@heroicons/react/24/outline';
+import { fetchPlaces } from '../lib/api';   // <-- new helper
 
 const Browse = () => {
-  const [places, setPlaces] = useState(placesData);
-  const [filteredPlaces, setFilteredPlaces] = useState(placesData);
+  const [places, setPlaces] = useState([]);
+  const [filteredPlaces, setFilteredPlaces] = useState([]);
   const [selectedCategory, setSelectedCategory] = useState('All');
   const [selectedRating, setSelectedRating] = useState('All');
   const [selectedPriceLevel, setSelectedPriceLevel] = useState('All');
   const [searchQuery, setSearchQuery] = useState('');
   const [showFilters, setShowFilters] = useState(false);
   const [toast, setToast] = useState(null);
+  const [loading, setLoading] = useState(true);
 
-  const categories = ['All', ...new Set(placesData.map(place => place.category))];
+  // categories are derived after load
+  const [categories, setCategories] = useState(['All']);
   const ratings = ['All', '4.5+', '4.0+', '3.5+'];
   const priceLevels = ['All', '1', '2', '3', '4'];
 
+  // Fetch from backend or fallback
   useEffect(() => {
-    let filtered = places;
+    (async () => {
+      try {
+        const data = await fetchPlaces();
+        setPlaces(data);
+        setFilteredPlaces(data);
+        setCategories(['All', ...new Set(data.map(place => place.category))]);
+      } catch (e) {
+        console.error("Failed to load places", e);
+      } finally {
+        setLoading(false);
+      }
+    })();
+  }, []);
+
+  // Apply filters when places or filter settings change
+  useEffect(() => {
+    let filtered = [...places];
 
     if (selectedCategory !== 'All') {
       filtered = filtered.filter(place => place.category === selectedCategory);
@@ -29,7 +48,7 @@ const Browse = () => {
 
     if (selectedRating !== 'All') {
       const minRating = parseFloat(selectedRating);
-      filtered = filtered.filter(place => place.rating >= minRating);
+      filtered = filtered.filter(place => (place.rating ?? 0) >= minRating);
     }
 
     if (selectedPriceLevel !== 'All') {
@@ -40,8 +59,8 @@ const Browse = () => {
     if (searchQuery) {
       filtered = filtered.filter(place =>
         place.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        place.city.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        place.description.toLowerCase().includes(searchQuery.toLowerCase())
+        (place.city ?? '').toLowerCase().includes(searchQuery.toLowerCase()) ||
+        (place.description ?? '').toLowerCase().includes(searchQuery.toLowerCase())
       );
     }
 
@@ -72,6 +91,10 @@ const Browse = () => {
     setSearchQuery('');
   };
 
+  if (loading) {
+    return <div className="p-8 text-center text-gray-500">Loading destinations…</div>;
+  }
+
   return (
     <div className="min-h-screen bg-gray-50">
       {toast && (
@@ -82,6 +105,7 @@ const Browse = () => {
         />
       )}
 
+      {/* top bar */}
       <div className="bg-white shadow-sm">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
           <div className="text-center mb-8">
@@ -117,6 +141,7 @@ const Browse = () => {
           {showFilters && (
             <div className="mt-6 p-6 bg-gray-50 rounded-lg">
               <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                {/* rating filter */}
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">
                     Rating
@@ -132,6 +157,7 @@ const Browse = () => {
                   </select>
                 </div>
 
+                {/* price filter */}
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">
                     Price Level
@@ -163,6 +189,7 @@ const Browse = () => {
         </div>
       </div>
 
+      {/* places grid */}
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <CategoryChips
           categories={categories}
