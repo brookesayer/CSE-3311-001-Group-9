@@ -1,25 +1,38 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { XMarkIcon, ChevronLeftIcon, ChevronRightIcon } from '@heroicons/react/24/outline';
-import placesData from '../data/places.json';
+import { fetchPlaces } from '../lib/api';   // <-- new import
 
 const Gallery = () => {
+  const [places, setPlaces] = useState([]);
   const [selectedImage, setSelectedImage] = useState(null);
   const [selectedCategory, setSelectedCategory] = useState('All');
+  const [loading, setLoading] = useState(true);
 
-  const categories = ['All', ...new Set(placesData.map(place => place.category))];
+  useEffect(() => {
+    (async () => {
+      try {
+        const data = await fetchPlaces();
+        setPlaces(data);
+      } catch (e) {
+        console.error("Failed to load places", e);
+      } finally {
+        setLoading(false);
+      }
+    })();
+  }, []);
+
+  const categories = ['All', ...new Set(places.map(place => place.category))];
 
   const filteredImages = selectedCategory === 'All'
-    ? placesData
-    : placesData.filter(place => place.category === selectedCategory);
+    ? places
+    : places.filter(place => place.category === selectedCategory);
 
   const openLightbox = (place, index) => {
     setSelectedImage({ place, index });
   };
 
-  const closeLightbox = () => {
-    setSelectedImage(null);
-  };
+  const closeLightbox = () => setSelectedImage(null);
 
   const navigateImage = (direction) => {
     if (!selectedImage) return;
@@ -42,19 +55,22 @@ const Gallery = () => {
     if (e.key === 'ArrowLeft') navigateImage('prev');
   };
 
+  if (loading) {
+    return <div className="p-12 text-center text-gray-500">Loading gallery…</div>;
+  }
+
   return (
     <div className="min-h-screen bg-gray-50 py-12">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="text-center mb-12">
-          <h1 className="text-4xl font-bold text-gray-900 mb-4">
-            Adventure Gallery
-          </h1>
+          <h1 className="text-4xl font-bold text-gray-900 mb-4">Adventure Gallery</h1>
           <p className="text-xl text-gray-600 max-w-3xl mx-auto">
             Immerse yourself in breathtaking photography from around the world.
             Each image tells a story of adventure, culture, and natural beauty.
           </p>
         </div>
 
+        {/* category filters */}
         <div className="flex flex-wrap justify-center gap-4 mb-12">
           {categories.map((category) => (
             <button
@@ -71,6 +87,7 @@ const Gallery = () => {
           ))}
         </div>
 
+        {/* gallery grid */}
         <motion.div
           layout
           className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6"
@@ -89,7 +106,7 @@ const Gallery = () => {
               >
                 <div className="aspect-square overflow-hidden">
                   <img
-                    src={place.imageUrl}
+                    src={place.photo_url || place.imageUrl || "/placeholder.jpg"}
                     alt={place.name}
                     className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110"
                   />
@@ -112,6 +129,7 @@ const Gallery = () => {
         )}
       </div>
 
+      {/* Lightbox */}
       <AnimatePresence>
         {selectedImage && (
           <motion.div
@@ -129,7 +147,7 @@ const Gallery = () => {
                 initial={{ scale: 0.8, opacity: 0 }}
                 animate={{ scale: 1, opacity: 1 }}
                 exit={{ scale: 0.8, opacity: 0 }}
-                src={selectedImage.place.imageUrl}
+                src={selectedImage.place.photo_url || selectedImage.place.imageUrl || "/placeholder.jpg"}
                 alt={selectedImage.place.name}
                 className="max-w-full max-h-full object-contain rounded-lg"
                 onClick={(e) => e.stopPropagation()}

@@ -2,7 +2,6 @@ import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { storage } from '../lib/storage';
 import Toast from '../components/Toast';
-import placesData from '../data/places.json';
 import {
   StarIcon,
   MapPinIcon,
@@ -11,46 +10,57 @@ import {
   ArrowLeftIcon,
   CheckIcon
 } from '@heroicons/react/24/solid';
+import { fetchPlaceById } from '../lib/api';
 
 const PlaceDetails = () => {
   const { id } = useParams();
   const navigate = useNavigate();
+
   const [place, setPlace] = useState(null);
   const [trips, setTrips] = useState([]);
   const [selectedTripId, setSelectedTripId] = useState('');
   const [toast, setToast] = useState(null);
   const [isAdded, setIsAdded] = useState(false);
+  const [loading, setLoading] = useState(true);
 
+  // Load place + trips
   useEffect(() => {
-    const foundPlace = placesData.find(p => p.id === parseInt(id));
-    if (foundPlace) {
-      setPlace(foundPlace);
-    }
+    let active = true;
+    (async () => {
+      try {
+        const p = await fetchPlaceById(id);
+        if (active) setPlace(p || null);
+      } finally {
+        if (active) setLoading(false);
+      }
+    })();
 
     const savedTrips = storage.getTrips();
     setTrips(savedTrips);
-    if (savedTrips.length > 0) {
-      setSelectedTripId(savedTrips[0].id);
-    }
+    if (savedTrips.length > 0) setSelectedTripId(savedTrips[0].id);
+
+    return () => { active = false; };
   }, [id]);
 
+  // Check if already in selected trip
   useEffect(() => {
     if (place && selectedTripId) {
       const trip = trips.find(t => t.id === selectedTripId);
       if (trip) {
-        const alreadyAdded = trip.places.some(p => p.id === place.id);
-        setIsAdded(alreadyAdded);
+        const already = trip.places.some(p => Number(p.id) === Number(place.id));
+        setIsAdded(already);
       }
     }
   }, [place, selectedTripId, trips]);
 
   const getPriceLevelText = (level) => {
     const texts = ['Budget-friendly', 'Moderate', 'Expensive', 'Luxury'];
-    return texts[level - 1] || 'Unknown';
+    return texts[(level ?? 0) - 1] || 'Unknown';
   };
 
   const getPriceLevelSymbol = (level) => {
-    return '$'.repeat(level);
+    const n = Number(level ?? 0);
+    return n > 0 ? '$'.repeat(n) : '—';
   };
 
   const handleAddToTrip = () => {
@@ -58,6 +68,7 @@ const PlaceDetails = () => {
       setToast({ message: 'Please select a trip first!', type: 'warning' });
       return;
     }
+    if (!place) return;
 
     const success = storage.addPlaceToTrip(selectedTripId, place);
     const trip = trips.find(t => t.id === selectedTripId);
@@ -71,16 +82,18 @@ const PlaceDetails = () => {
     }
   };
 
-  const handleCreateNewTrip = () => {
-    navigate('/trips');
-  };
+  const handleCreateNewTrip = () => navigate('/trips');
+
+  if (loading) {
+    return <div className="min-h-screen flex items-center justify-center text-gray-500">Loading place…</div>;
+  }
 
   if (!place) {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <div className="text-center">
           <h2 className="text-2xl font-bold text-gray-900 mb-2">Place not found</h2>
-          <p className="text-gray-600 mb-4">The destination you're looking for doesn't exist.</p>
+          <p className="text-gray-600 mb-4">The destination you’re looking for doesn’t exist.</p>
           <button onClick={() => navigate('/browse')} className="btn-primary">
             Browse Destinations
           </button>
@@ -88,6 +101,8 @@ const PlaceDetails = () => {
       </div>
     );
   }
+
+  const heroImg = place.photo_url || place.imageUrl || '/placeholder.jpg';
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -99,9 +114,10 @@ const PlaceDetails = () => {
         />
       )}
 
+      {/* Hero */}
       <div className="relative h-96 overflow-hidden">
         <img
-          src={place.imageUrl}
+          src={heroImg}
           alt={place.name}
           className="w-full h-full object-cover"
         />
@@ -115,23 +131,28 @@ const PlaceDetails = () => {
         </button>
 
         <div className="absolute bottom-6 left-6 text-white">
-          <span className="bg-white/20 backdrop-blur-sm px-3 py-1 rounded-full text-sm font-medium mb-3 inline-block">
-            {place.category}
-          </span>
+          {place.category && (
+            <span className="bg-white/20 backdrop-blur-sm px-3 py-1 rounded-full text-sm font-medium mb-3 inline-block">
+              {place.category}
+            </span>
+          )}
           <h1 className="text-4xl md:text-5xl font-bold mb-2">{place.name}</h1>
-          <div className="flex items-center text-lg">
-            <MapPinIcon className="h-5 w-5 mr-2" />
-            <span>{place.city}</span>
-          </div>
+          {(place.city || place.address) && (
+            <div className="flex items-center text-lg">
+              <MapPinIcon className="h-5 w-5 mr-2" />
+              <span>{place.city || place.address}</span>
+            </div>
+          )}
         </div>
       </div>
 
+      {/* Content */}
       <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-12">
           <div className="lg:col-span-2">
             <div className="card p-8 mb-8">
               <h2 className="text-2xl font-bold text-gray-900 mb-4">About this destination</h2>
-              <p className="text-gray-700 text-lg leading-relaxed">{place.description}</p>
+              <p className="text-gray-700 text-lg leading-relaxed">{place.description || 'No description available.'}</p>
             </div>
 
             <div className="card p-8">
@@ -139,7 +160,7 @@ const PlaceDetails = () => {
               <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                 <div className="text-center p-4 bg-gray-50 rounded-lg">
                   <StarIcon className="h-8 w-8 text-yellow-400 mx-auto mb-2" />
-                  <div className="text-2xl font-bold text-gray-900">{place.rating}</div>
+                  <div className="text-2xl font-bold text-gray-900">{place.rating ?? '—'}</div>
                   <div className="text-sm text-gray-600">Rating</div>
                 </div>
                 <div className="text-center p-4 bg-gray-50 rounded-lg">
@@ -151,10 +172,23 @@ const PlaceDetails = () => {
                 </div>
                 <div className="text-center p-4 bg-gray-50 rounded-lg">
                   <MapPinIcon className="h-8 w-8 text-adventure-500 mx-auto mb-2" />
-                  <div className="text-lg font-bold text-gray-900">{place.category}</div>
+                  <div className="text-lg font-bold text-gray-900">{place.category || '—'}</div>
                   <div className="text-sm text-gray-600">Category</div>
                 </div>
               </div>
+
+              {place.directions_url && (
+                <div className="mt-6">
+                  <a
+                    href={place.directions_url}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="btn-secondary inline-block"
+                  >
+                    Open in Google Maps
+                  </a>
+                </div>
+              )}
             </div>
           </div>
 
@@ -224,6 +258,7 @@ const PlaceDetails = () => {
               )}
             </div>
           </div>
+
         </div>
       </div>
     </div>
