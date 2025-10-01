@@ -20,6 +20,6 @@ python -m backend.seed_places --categories restaurants cafes bars --city "Arling
 # Replace (wipe table first):
 python -m backend.seed_places --replace --categories restaurants parks museums
 
-replace 
-# export (dedup, overwrite)
-python -m backend.export_to_json --out "replace with path to places.json in frontend"
+cd simpleapp
+npm install
+npm run dev

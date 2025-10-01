@@ -1,54 +1,94 @@
-# backend/main.py
+# backend/app.py  (FastAPI backend) — fixes CORS + guarantees JSON at /api/places
+
 from fastapi import FastAPI
-from fastapi.staticfiles import StaticFiles
-from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
+from fastapi.responses import JSONResponse, FileResponse
 from pathlib import Path
-import hashlib
 import json
 import os
-import sqlite3
+
+# Optional: SQLAlchemy fallback if you have a DB
+USE_DB = os.getenv("USE_DB", "0") == "1"
+if USE_DB:
+    from sqlalchemy import create_engine, text
+    from sqlalchemy.orm import Session
+    DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///./dev.db")
+    engine = create_engine(DATABASE_URL, future=True)
 
 APP_DIR = Path(__file__).resolve().parent
+DATA_DIR = APP_DIR / "data"
+DATA_DIR.mkdir(exist_ok=True)
+DATA_FILE = DATA_DIR / "places.json"
+
 STATIC_DIR = APP_DIR / "static"
-DB_PATH = os.getenv("SQLITE_PATH", str(APP_DIR / "dev.db"))
+STATIC_DIR.mkdir(exist_ok=True)
+(STATIC_DIR / "places").mkdir(parents=True, exist_ok=True)
 
 app = FastAPI(title="Places API")
 
-# CORS (dev convenience)
+# ✅ CORS: no trailing slashes on origins, allow localhost & 127.0.0.1
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
-        "http://localhost:5173", "http://127.0.0.1:5173",
-        "http://localhost:3000", "http://127.0.0.1:3000",
+        "http://localhost:5173",
+        "http://127.0.0.1:5173",
+        "http://localhost:4173",
+        "http://127.0.0.1:4173",
     ],
+    allow_origin_regex=r"http://(localhost|127\.0\.0\.1):\d+",
     allow_credentials=True,
-    allow_methods=["*"],
+    allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
     allow_headers=["*"],
 )
 
+# Serve /static (images live in /static/places/)
 app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
 
-def fetch_all_places():
-    conn = sqlite3.connect(DB_PATH)
-    conn.row_factory = sqlite3.Row
-    rows = conn.execute("""
-      SELECT id, name, category, description, address, lat, lon, photo_url, directions_url
-      FROM places
-      ORDER BY id ASC
-    """).fetchall()
-    conn.close()
-    return [dict(r) for r in rows]
+
+def _read_places_json_bytes() -> bytes:
+    if DATA_FILE.exists():
+        return DATA_FILE.read_bytes()
+    # empty array if missing
+    return b"[]"
+
+
+@app.get("/api/health")
+def health():
+    return {"ok": True}
+
 
 @app.get("/api/places")
 def get_places():
-    data = fetch_all_places()
-    # ETag over JSON bytes for simple client caching
-    body = json.dumps(data, ensure_ascii=False).encode("utf-8")
-    etag = hashlib.sha256(body).hexdigest()
-    headers = {"ETag": etag, "Cache-Control": "no-cache"}
-    return JSONResponse(content=data, headers=headers)
+    """
+    Always returns JSON. If USE_DB=1 and DB has a 'places' table, read from DB.
+    Otherwise serve data/places.json. Never return HTML (prevents “Unexpected token '<'”).
+    """
+    if USE_DB:
+        try:
+            with Session(engine) as db:
+                rows = db.execute(text("""
+                    SELECT id, name, category, description, address, lat, lon,
+                           photo_url, directions_url
+                    FROM places
+                    ORDER BY id ASC
+                """)).mappings().all()
+                return JSONResponse(content=list(map(dict, rows)))
+        except Exception as e:
+            # fall through to file if DB not ready
+            print(f"[WARN] DB read failed, falling back to file: {e}")
 
-@app.get("/")
-def root():
-    return {"ok": True, "hint": "GET /api/places; images under /static/places"}
+    # File fallback
+    try:
+        data = json.loads(_read_places_json_bytes().decode("utf-8"))
+    except Exception:
+        data = []
+    return JSONResponse(content=data, media_type="application/json")
+
+
+# Optional: expose the raw file as well for debugging
+@app.get("/places.json")
+def places_json_file():
+    if DATA_FILE.exists():
+        return FileResponse(DATA_FILE, media_type="application/json")
+    return JSONResponse(content=[], media_type="application/json")

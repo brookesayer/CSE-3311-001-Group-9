@@ -1,81 +1,94 @@
-# app.py
-from fastapi import FastAPI, Depends, HTTPException, Query
+# backend/app.py  (FastAPI backend) — fixes CORS + guarantees JSON at /api/places
+
+from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from sqlalchemy.orm import Session
+from fastapi.staticfiles import StaticFiles
+from fastapi.responses import JSONResponse, FileResponse
+from pathlib import Path
+import json
+import os
 
-from .db import Base, engine, get_db
-from . import models, schemas, crud
+# Optional: SQLAlchemy fallback if you have a DB
+USE_DB = os.getenv("USE_DB", "0") == "1"
+if USE_DB:
+    from sqlalchemy import create_engine, text
+    from sqlalchemy.orm import Session
+    DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///./dev.db")
+    engine = create_engine(DATABASE_URL, future=True)
 
-app = FastAPI(title="Places API (SQLite)")
+APP_DIR = Path(__file__).resolve().parent
+DATA_DIR = APP_DIR / "data"
+DATA_DIR.mkdir(exist_ok=True)
+DATA_FILE = DATA_DIR / "places.json"
 
-# Allow your Vite dev server and any other origins you need
+STATIC_DIR = APP_DIR / "static"
+STATIC_DIR.mkdir(exist_ok=True)
+(STATIC_DIR / "places").mkdir(parents=True, exist_ok=True)
+
+app = FastAPI(title="Places API")
+
+# ✅ CORS: no trailing slashes on origins, allow localhost & 127.0.0.1
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
         "http://localhost:5173",
         "http://127.0.0.1:5173",
-        "http://localhost:3000",
-        "http://127.0.0.1:3000",
-        "*",  # widen if needed during development
+        "http://localhost:4173",
+        "http://127.0.0.1:4173",
     ],
+    allow_origin_regex=r"http://(localhost|127\.0\.0\.1):\d+",
     allow_credentials=True,
-    allow_methods=["*"],
+    allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
     allow_headers=["*"],
 )
 
-from fastapi import FastAPI, Depends, HTTPException, Query
-from sqlalchemy.orm import Session
-from .db import Base, engine, get_db
-from . import models, schemas, crud
+# Serve /static (images live in /static/places/)
+app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
 
-app = FastAPI(title="Places API (SQLite)")
 
-@app.on_event("startup")
-def on_startup():
-    Base.metadata.create_all(bind=engine)
+def _read_places_json_bytes() -> bytes:
+    if DATA_FILE.exists():
+        return DATA_FILE.read_bytes()
+    # empty array if missing
+    return b"[]"
 
-# Health check
+
 @app.get("/api/health")
 def health():
-    return {"status": "ok"}
+    return {"ok": True}
 
-# ---- Places CRUD ----
 
-@app.post("/api/places", response_model=schemas.PlaceRead)
-def create_place(payload: schemas.PlaceCreate, db: Session = Depends(get_db)):
+@app.get("/api/places")
+def get_places():
+    """
+    Always returns JSON. If USE_DB=1 and DB has a 'places' table, read from DB.
+    Otherwise serve data/places.json. Never return HTML (prevents “Unexpected token '<'”).
+    """
+    if USE_DB:
+        try:
+            with Session(engine) as db:
+                rows = db.execute(text("""
+                    SELECT id, name, category, description, address, lat, lon,
+                           photo_url, directions_url
+                    FROM places
+                    ORDER BY id ASC
+                """)).mappings().all()
+                return JSONResponse(content=list(map(dict, rows)))
+        except Exception as e:
+            # fall through to file if DB not ready
+            print(f"[WARN] DB read failed, falling back to file: {e}")
+
+    # File fallback
     try:
-        return crud.create_place(db, payload)
-    except Exception as e:
-        # Catch unique constraint violations and return 400
-        # In production you'd inspect the exception type
-        raise HTTPException(status_code=400, detail=str(e))
+        data = json.loads(_read_places_json_bytes().decode("utf-8"))
+    except Exception:
+        data = []
+    return JSONResponse(content=data, media_type="application/json")
 
-@app.get("/api/places", response_model=list[schemas.PlaceRead])
-def list_places(
-    q: str | None = Query(default=None, description="Simple search query"),
-    skip: int = 0,
-    limit: int = 100,
-    db: Session = Depends(get_db)
-):
-    return crud.list_places(db, q=q, skip=skip, limit=limit)
 
-@app.get("/api/places/{place_id}", response_model=schemas.PlaceRead)
-def get_place(place_id: int, db: Session = Depends(get_db)):
-    place = crud.get_place(db, place_id)
-    if not place:
-        raise HTTPException(status_code=404, detail="Place not found")
-    return place
-
-@app.patch("/api/places/{place_id}", response_model=schemas.PlaceRead)
-def update_place(place_id: int, payload: schemas.PlaceUpdate, db: Session = Depends(get_db)):
-    place = crud.update_place(db, place_id, payload)
-    if not place:
-        raise HTTPException(status_code=404, detail="Place not found")
-    return place
-
-@app.delete("/api/places/{place_id}", status_code=204)
-def delete_place(place_id: int, db: Session = Depends(get_db)):
-    ok = crud.delete_place(db, place_id)
-    if not ok:
-        raise HTTPException(status_code=404, detail="Place not found")
-    return None
+# Optional: expose the raw file as well for debugging
+@app.get("/places.json")
+def places_json_file():
+    if DATA_FILE.exists():
+        return FileResponse(DATA_FILE, media_type="application/json")
+    return JSONResponse(content=[], media_type="application/json")
