@@ -1,0 +1,25 @@
+cd C:\Users\stock\Downloads\CSE-3311-001-Group-9
+make sure this is your dir
+
+# create venv inside backend
+python -m venv backend\.venv
+
+# activate
+.\backend\.venv\Scripts\activate
+
+pip install -r backend\requirements.txt
+
+pip install openai
+
+uvicorn backend.app:app --reload --env-file backend/.env
+
+# stop uvicorn first to avoid locks
+python -m backend.seed_places
+# Custom:
+python -m backend.seed_places --categories restaurants cafes bars --city "Arlington, TX"
+# Replace (wipe table first):
+python -m backend.seed_places --replace --categories restaurants parks museums
+
+cd simpleapp
+npm install
+npm run dev
