@@ -10,6 +10,11 @@ class PlaceBase(BaseModel):
     lat: Optional[float] = None
     lon: Optional[float] = None
 
+    # NEW
+    price_level: Optional[int] = None
+    image_url: Optional[str] = None
+    maps_url: Optional[str] = None
+
 class PlaceCreate(PlaceBase):
     pass
 
@@ -20,10 +25,14 @@ class PlaceUpdate(BaseModel):
     address: Optional[str] = None
     lat: Optional[float] = None
     lon: Optional[float] = None
+    # NEW
+    price_level: Optional[int] = None
+    image_url: Optional[str] = None
+    maps_url: Optional[str] = None
 
 class PlaceRead(PlaceBase):
     id: int
-
     class Config:
-        from_attributes = True  # Pydantic v2 equivalent of orm_mode
-        orm_mode = True  # For Pydantic v1 compatibility
+        from_attributes = True
+        orm_mode = True
+        allow_population_by_field_name = True

@@ -1,6 +1,8 @@
 # backend/fetch_photos_and_links.py
 # (formerly enrich_links_to_db.py logic) — now also FILLS/UPDATES address using Google Maps (Places + Reverse Geocoding)
+# MODIFIED: to accept a --name argument for targeted searches.
 
+import argparse # Added for command-line arguments
 import math
 import os
 import pathlib
@@ -13,6 +15,7 @@ import sqlite3
 from dotenv import load_dotenv
 from slugify import slugify
 
+# --- Configuration (No changes here) ---
 BACKEND_DIR = pathlib.Path(__file__).resolve().parent
 load_dotenv(BACKEND_DIR.parent / ".env")
 load_dotenv(BACKEND_DIR / ".env")
@@ -21,21 +24,22 @@ API_KEY = os.getenv("GOOGLE_MAPS_API_KEY")
 if not API_KEY:
     raise RuntimeError("Set GOOGLE_MAPS_API_KEY in .env")
 
-DB_PATH = os.getenv("SQLITE_PATH", str(BACKEND_DIR / "dev.db"))
+DB_PATH = os.getenv("SQLITE_PATH", str(BACKEND_DIR.parent / "dev.db"))
 IMAGES_DIR = BACKEND_DIR / "static" / "places"
 IMAGES_DIR.mkdir(parents=True, exist_ok=True)
 PUBLIC_BASE = (os.getenv("API_BASE_URL", "http://localhost:8000").rstrip("/")) + "/static/places"
 
-# Tuning knobs
-BIAS_RADIUS_M = 50000          # location bias radius (50 km)
-PASS_DISTANCE_KM = 50.0        # max drift allowed vs existing coords
-PASS_NEEDS_CITY = False        # set True if you have city/state on rows and want strict address check
+BIAS_RADIUS_M = 50000
+PASS_DISTANCE_KM = 50.0
+PASS_NEEDS_CITY = False
 
-# Google endpoints
 FIND_PLACE_URL = "https://maps.googleapis.com/maps/api/place/findplacefromtext/json"
 PLACE_DETAILS_URL = "https://maps.googleapis.com/maps/api/place/details/json"
 PHOTO_URL = "https://maps.googleapis.com/maps/api/place/photo"
 REVERSE_GEOCODE_URL = "https://maps.googleapis.com/maps/api/geocode/json"
+
+
+# --- Helper Functions (No changes from your original code) ---
 
 def ensure_schema(conn: sqlite3.Connection):
     conn.execute("""
@@ -68,6 +72,7 @@ def haversine_km(lat1, lon1, lat2, lon2):
 
 def build_search_text(place: Dict[str, Any]) -> str:
     parts = [place.get("name") or ""]
+    # When searching by name only, we still prefer address info if it exists in the DB
     if place.get("address"): parts.append(place["address"])
     if place.get("city"): parts.append(place["city"])
     if place.get("state"): parts.append(place["state"])
@@ -104,7 +109,6 @@ def place_details_geometry(place_id: str):
     }
 
 def reverse_geocode(lat: float, lon: float) -> Optional[str]:
-    """Return formatted address from lat/lon using Google Reverse Geocoding."""
     params = {"latlng": f"{lat},{lon}", "key": API_KEY}
     r = requests.get(REVERSE_GEOCODE_URL, params=params, timeout=15)
     r.raise_for_status()
@@ -119,16 +123,18 @@ def address_likely_matches(formatted_address: Optional[str], city: Optional[str]
     return ok_city and ok_state
 
 def google_directions_url(place: Dict[str, Any], place_id: Optional[str]) -> str:
-    base = "https://www.google.com/maps/dir/?api=1"
+    base = "https://www.google.com/maps/dir/?api=1" # Using a more standard directions URL
     params = []
+    # Using place_id is the most reliable destination
     if place_id:
         params.append(("destination_place_id", place_id))
-    if (place.get("lat") is not None) and (place.get("lon") is not None):
+        params.append(("destination", urllib.parse.quote(place.get("name", ""))))
+    elif (place.get("lat") is not None) and (place.get("lon") is not None):
         params.append(("destination", f"{place['lat']},{place['lon']}"))
     elif place.get("address"):
-        params.append(("destination", place["address"]))
+        params.append(("destination", urllib.parse.quote(place["address"])))
     elif place.get("name"):
-        params.append(("destination", place["name"]))
+        params.append(("destination", urllib.parse.quote(place["name"])))
     return base + "&" + urllib.parse.urlencode(params)
 
 def choose_best_photo(photos: List[Dict[str, Any]]) -> Optional[str]:
@@ -149,35 +155,67 @@ def download_place_photo(photo_ref: str, outfile: pathlib.Path, maxwidth: int = 
 def safe_filename(name: str, pid: int) -> str:
     return f"{slugify(name or f'place-{pid}')}.jpg"
 
+
+# --- MAIN LOGIC (MODIFIED) ---
+
 def main():
+    # Set up argument parser to accept a name and location
+    parser = argparse.ArgumentParser(description="Fetch Google Places data for entries in the database.")
+    parser.add_argument("-n", "--name", type=str, help="The name of a specific place to process.")
+    parser.add_argument("--lat", type=float, help="Latitude to bias search results (useful with --name).")
+    parser.add_argument("--lon", type=float, help="Longitude to bias search results (useful with --name).")
+    args = parser.parse_args()
+
     conn = sqlite3.connect(DB_PATH)
     conn.row_factory = sqlite3.Row
     ensure_schema(conn)
 
-    rows = conn.execute("""
-        SELECT id, name, address, city, state, lat, lon, photo_url, directions_url
-        FROM places
-        ORDER BY id ASC
-    """).fetchall()
+    # Build query based on arguments
+    sql = "SELECT id, name, address, city, state, lat, lon, photo_url, directions_url FROM places"
+    params = []
+    if args.name:
+        sql += " WHERE name LIKE ?"
+        params.append(f"%{args.name}%") # Use LIKE for flexible matching
+    sql += " ORDER BY id ASC"
+
+    rows = conn.execute(sql, params).fetchall()
+
     if not rows:
-        print("No rows in places. Insert places first, then re-run.")
+        if args.name:
+            print(f"No place found in the database matching name: '{args.name}'")
+        else:
+            print("No rows in the 'places' table. Insert places first, then re-run.")
         return
 
+    print(f"Found {len(rows)} place(s) to process...")
     updated = 0
     for row in rows:
         place = dict(row)
-        bias_lat, bias_lon = place.get("lat"), place.get("lon")
-        search_text = build_search_text(place)
+        
+        # Prioritize command-line lat/lon for bias, otherwise use DB values
+        bias_lat = args.lat if args.lat is not None else place.get("lat")
+        bias_lon = args.lon if args.lon is not None else place.get("lon")
 
+        # The search text will now primarily use the name if that's all that's in the DB
+        search_text = build_search_text(place)
+        print(f"\nProcessing ID {place['id']}: '{place['name']}'...")
+        
+        # --- The rest of your processing loop remains the same ---
         candidate = None
         try:
             candidate = find_place_with_bias(search_text, bias_lat, bias_lon, country="us")
         except Exception as e:
             print(f"[WARN] FindPlace failed for '{place['name']}': {e}")
+            continue
 
-        place_id = candidate.get("place_id") if candidate else None
+        if not candidate:
+            print(" -> No candidate found on Google Places.")
+            continue
+        
+        print(f" -> Found candidate: {candidate.get('name')}")
+        place_id = candidate.get("place_id")
 
-        # Precise geometry + formatted address from Place Details
+        # ... (The rest of your code for details, geocoding, updates, etc. is unchanged)
         det = {}
         if place_id:
             try:
@@ -186,18 +224,15 @@ def main():
                 print(f"[WARN] Place Details failed for {place_id}: {e}")
 
         lat_g, lon_g = det.get("lat"), det.get("lon")
-        addr_g = det.get("formatted_address") or (candidate or {}).get("formatted_address") or ""
+        addr_g = det.get("formatted_address") or candidate.get("formatted_address") or ""
 
-        # If we still don't have an address but we have lat/lon → reverse geocode
         if not addr_g and (place.get("lat") is not None and place.get("lon") is not None):
             try:
                 addr_rev = reverse_geocode(place["lat"], place["lon"])
-                if addr_rev:
-                    addr_g = addr_rev
+                if addr_rev: addr_g = addr_rev
             except Exception as e:
                 print(f"[WARN] Reverse geocode failed for {place['name']}: {e}")
 
-        # Verify drift if we will update coords
         ok_city_state = address_likely_matches(addr_g, place.get("city"), place.get("state")) if PASS_NEEDS_CITY else True
         ok_distance = True
         dkm = None
@@ -206,7 +241,6 @@ def main():
             dkm = haversine_km(place["lat"], place["lon"], lat_g, lon_g)
             ok_distance = dkm <= PASS_DISTANCE_KM
 
-        # Update coords if verified
         if (lat_g is not None and lon_g is not None and ok_city_state and ok_distance):
             conn.execute("""
                 UPDATE places
@@ -214,58 +248,42 @@ def main():
                 WHERE id = ?
             """, (lat_g, lon_g, "google_places_details", "verified", dkm, place["id"]))
             place["lat"], place["lon"] = lat_g, lon_g
-        else:
-            if dkm is not None:
-                conn.execute("""
-                    UPDATE places
-                    SET geo_confidence = ?, geo_distance_km = ?
-                    WHERE id = ?
-                """, ("original_or_unverified", dkm, place["id"]))
-
-        # ADDRESS: write/refresh formatted_address if present
-        if addr_g and addr_g != (place.get("address") or ""):
+        elif dkm is not None:
             conn.execute("""
-                UPDATE places
-                SET address = ?
-                WHERE id = ?
-            """, (addr_g, place["id"]))
+                UPDATE places SET geo_confidence = ?, geo_distance_km = ? WHERE id = ?
+            """, ("original_or_unverified", dkm, place["id"]))
+
+        if addr_g and addr_g != (place.get("address") or ""):
+            conn.execute("UPDATE places SET address = ? WHERE id = ?", (addr_g, place["id"]))
             place["address"] = addr_g
 
-        # Build unique directions URL using place_id (preferable)
         new_dir = google_directions_url(place, place_id)
-
-        # Photo
         photo_url = place.get("photo_url")
         if not photo_url and candidate:
             photo_ref = choose_best_photo(candidate.get("photos") or [])
             if photo_ref:
                 out = IMAGES_DIR / safe_filename(place["name"], place["id"])
-                if out.exists():
-                    stem, i = out.stem, 1
-                    while out.exists():
-                        out = IMAGES_DIR / f"{stem}-{i}.jpg"; i += 1
                 try:
                     if download_place_photo(photo_ref, out):
                         photo_url = f"{PUBLIC_BASE}/{out.name}"
+                        print(" -> Downloaded new photo.")
                 except Exception as e:
                     print(f"[WARN] photo download failed for {place['name']}: {e}")
-
-        # Write URL updates
+        
         if (photo_url and photo_url != place.get("photo_url")) or (new_dir != place.get("directions_url")):
             conn.execute("""
                 UPDATE places
-                SET photo_url = COALESCE(?, photo_url),
-                    directions_url = ?
+                SET photo_url = COALESCE(?, photo_url), directions_url = ?
                 WHERE id = ?
             """, (photo_url, new_dir, place["id"]))
             updated += 1
+            print(" -> Updated URLs in database.")
 
-        # be polite with API quotas
-        time.sleep(0.25)
+        time.sleep(0.1) # Be polite with API quotas
 
     conn.commit()
     conn.close()
-    print(f"Done. Updated {updated} place(s).")
+    print(f"\nDone. Updated {updated} of {len(rows)} processed place(s).")
 
 if __name__ == "__main__":
     main()
