@@ -1,17 +1,22 @@
-import { defineConfig } from 'vite'
-import react from '@vitejs/plugin-react'
+// frontend/vite.config.ts — dev proxy so you avoid CORS entirely in dev
+import { defineConfig } from "vite";
+import react from "@vitejs/plugin-react";
 
 export default defineConfig({
   plugins: [react()],
   server: {
-    host: true,
-    // Proxy backend in dev so fetch('/api/…') and '/static/…' just work
+    port: 5173,
     proxy: {
-      '/api': 'http://localhost:8000',
-      '/static': 'http://localhost:8000'
-    }
+      // any call beginning with /api will be proxied to the FastAPI backend
+      "/api": {
+        target: "http://localhost:8000",
+        changeOrigin: true,
+      },
+      // optional: also proxy /static from backend
+      "/static": {
+        target: "http://localhost:8000",
+        changeOrigin: true,
+      },
+    },
   },
-  build: {
-    outDir: 'dist'
-  }
-})
+});
