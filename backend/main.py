@@ -1,5 +1,6 @@
 # main.py
 import os
+import pathlib
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import JSONResponse
 from sqlalchemy import create_engine, text
@@ -31,36 +32,34 @@ async def debug_headers(request: Request, call_next):
     return resp
 
 @app.get("/api/places")
-def get_places():
-    if not USE_DB:
-        raise HTTPException(status_code=503, detail="DB mode required. Set USE_DB=1.")
+def get_places(request: Request):
+    base = str(request.base_url).rstrip("/")
+    with Session(engine) as db:
+        rows = db.execute(text("""
+            SELECT id, name, category, description, address, lat, lon,
+                   price_level, image_url, maps_url
+            FROM places
+            ORDER BY id ASC
+        """)).mappings().all()
 
-    try:
-        with Session(engine) as db:
-            # Only query columns that actually exist in your table
-            rows = db.execute(text("""
-                SELECT id, name, category, description, address, lat, lon
-                FROM places
-                ORDER BY id ASC
-            """)).mappings().all()
+        return [
+            {
+                "id": r["id"],
+                "name": r["name"],
+                "category": r["category"],
+                "description": r["description"],
+                "city": r["address"],
+                "lat": r["lat"],
+                "lon": r["lon"],
+                "priceLevel": r["price_level"],
+                # 👇 build full static URL
+                "imageUrl": f"{base}/static/{r['image_url']}" if r["image_url"] else None,
+                "mapsUrl": r["maps_url"],
+            }
+            for r in rows
+        ]
+# main.py
+from fastapi.staticfiles import StaticFiles
 
-            # Map DB → frontend shape ("city" instead of "address")
-            data = []
-            for r in rows:
-                d = dict(r)
-                data.append({
-                    "id": d["id"],
-                    "name": d["name"],
-                    "category": d["category"],
-                    "description": d["description"],
-                    "city": d["address"],   # FE expects "city"
-                    "lat": d["lat"],
-                    "lon": d["lon"],
-                    "rating": None,
-                    "priceLevel": None,
-                    "imageUrl": None,
-                })
-            return data
-    except Exception as e:
-        # Fail loud so you fix the root cause (instead of silently using a file)
-        raise HTTPException(status_code=500, detail=f"DB read failed: {e}")
+STATIC_DIR = pathlib.Path(__file__).with_name("static").resolve()
+app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")

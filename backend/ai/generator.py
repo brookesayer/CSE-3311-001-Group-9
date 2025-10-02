@@ -33,8 +33,8 @@ def generate_places(category: str, city: str = "Arlington, TX") -> List[Dict]:
 
     system = (
         "You are a travel data generator. Return STRICT JSON array. "
-        "Each item must have keys: name, category, description, address, lat, lon. "
-        "Descriptions should be short and realistic. "
+        "Each item must have keys: name, category, description, address, lat, lon, price. "
+        "Descriptions should be three sentences and realistic. "
         "Avoid national or global chains (e.g., McDonald's, Starbucks). "
         "Focus on independent, local businesses or unique regional favorites. "
         "Always include a valid postal address (street, city, state, postal code). "
@@ -73,5 +73,6 @@ def generate_places(category: str, city: str = "Arlington, TX") -> List[Dict]:
             "address": item.get("address"),      # required by prompt; enrichment will verify/fix if needed
             "lat": item.get("lat"),
             "lon": item.get("lon"),
+            "price": item.get("price"),          # optional; may be None
         })
     return normalized
