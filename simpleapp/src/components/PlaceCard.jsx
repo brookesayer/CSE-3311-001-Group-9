@@ -3,13 +3,22 @@ import { StarIcon, MapPinIcon, CurrencyDollarIcon } from '@heroicons/react/24/so
 import { PlusIcon } from '@heroicons/react/24/outline';
 
 const PlaceCard = ({ place, onAddToTrip, showAddButton = true }) => {
-  const getPriceLevelText = (level) => {
-    return '$'.repeat(level);
+  const normalizePriceLevel = (value) => {
+    const numeric = Number(value);
+    if (!Number.isFinite(numeric) || numeric <= 0) return null;
+    return Math.min(4, Math.max(1, Math.round(numeric)));
+  };
+
+  const getPriceLevelText = (level, display) => {
+    if (display) return display;
+    const normalized = normalizePriceLevel(level);
+    return normalized ? '$'.repeat(normalized) : 'N/A';
   };
 
   const getPriceLevelColor = (level) => {
     const colors = ['text-green-600', 'text-yellow-600', 'text-orange-600', 'text-red-600'];
-    return colors[level - 1] || 'text-gray-600';
+    const normalized = normalizePriceLevel(level);
+    return normalized ? colors[normalized - 1] ?? 'text-gray-600' : 'text-gray-600';
   };
 
   return (
@@ -17,10 +26,11 @@ const PlaceCard = ({ place, onAddToTrip, showAddButton = true }) => {
       <div className="relative overflow-hidden">
         <Link to={`/place/${place.id}`}>
           <img
-            src={place.imageUrl}
+            src={place.imageUrl || "/placeholder.jpg"}
             alt={place.name}
             className="w-full h-48 object-cover transition-transform duration-500 group-hover:scale-110"
           />
+
         </Link>
         <div className="absolute top-3 left-3">
           <span className="bg-white/90 backdrop-blur-sm px-2 py-1 rounded-full text-xs font-medium text-gray-700">
@@ -68,7 +78,7 @@ const PlaceCard = ({ place, onAddToTrip, showAddButton = true }) => {
             <div className={`flex items-center ${getPriceLevelColor(place.priceLevel)}`}>
               <CurrencyDollarIcon className="h-4 w-4" />
               <span className="text-sm font-medium">
-                {getPriceLevelText(place.priceLevel)}
+                {getPriceLevelText(place.priceLevel, place.priceDisplay)}
               </span>
             </div>
           </div>

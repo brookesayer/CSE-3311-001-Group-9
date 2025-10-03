@@ -1,18 +1,19 @@
 # models.py
-from sqlalchemy import Column, Integer, Text, Float, UniqueConstraint
+from sqlalchemy import Column, Integer, String, Float, Text
 from db import Base
 
 class Place(Base):
     __tablename__ = "places"
 
     id = Column(Integer, primary_key=True, index=True)
-    name = Column(Text, nullable=False)
-    category = Column(Text, nullable=True)
-    description = Column(Text, nullable=True)
-    address = Column(Text, nullable=True)
-    lat = Column(Float, nullable=True)
-    lon = Column(Float, nullable=True)
+    name = Column(String, nullable=False)
+    category = Column(String)
+    description = Column(Text)
+    address = Column(String)
+    lat = Column(Float)
+    lon = Column(Float)
 
-    __table_args__ = (
-        UniqueConstraint("name", "address", name="uniq_place"),
-    )
+    # NEW FIELDS
+    price_level = Column(Integer, nullable=True)  # 0..4 like Google; nullable if unknown
+    image_url   = Column(Text, nullable=True)
+    maps_url    = Column(Text, nullable=True)

@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { XMarkIcon, ChevronLeftIcon, ChevronRightIcon } from '@heroicons/react/24/outline';
-import { fetchPlaces } from '../lib/api';   // <-- new import
+import { fetchPlaces } from '../lib/api';
 
 const Gallery = () => {
   const [places, setPlaces] = useState([]);
@@ -106,7 +106,7 @@ const Gallery = () => {
               >
                 <div className="aspect-square overflow-hidden">
                   <img
-                    src={place.photo_url || place.imageUrl || "/placeholder.jpg"}
+                    src={place.imageUrl || "/placeholder.jpg"}
                     alt={place.name}
                     className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110"
                   />
@@ -147,7 +147,7 @@ const Gallery = () => {
                 initial={{ scale: 0.8, opacity: 0 }}
                 animate={{ scale: 1, opacity: 1 }}
                 exit={{ scale: 0.8, opacity: 0 }}
-                src={selectedImage.place.photo_url || selectedImage.place.imageUrl || "/placeholder.jpg"}
+                src={selectedImage.place.imageUrl || "/placeholder.jpg"}
                 alt={selectedImage.place.name}
                 className="max-w-full max-h-full object-contain rounded-lg"
                 onClick={(e) => e.stopPropagation()}

@@ -86,6 +86,7 @@ def seed_places(categories: List[str], city: str = "Arlington, TX", replace: boo
                         address=address,  # may be None; enrichment fills later
                         lat=p.get("lat"),
                         lon=p.get("lon"),
+                        price_level=p.get("price"),  # may be None
                     ))
                     inserted_cat += 1
 
