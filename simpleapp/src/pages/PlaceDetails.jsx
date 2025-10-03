@@ -53,14 +53,37 @@ const PlaceDetails = () => {
     }
   }, [place, selectedTripId, trips]);
 
-  const getPriceLevelText = (level) => {
-    const texts = ['Budget-friendly', 'Moderate', 'Expensive', 'Luxury'];
-    return texts[(level ?? 0) - 1] || 'Unknown';
+  const normalizePriceLevel = (value) => {
+    if (value == null) return null;
+    const numeric = Number(value);
+    if (!Number.isNaN(numeric) && Number.isFinite(numeric) && numeric > 0) {
+      return Math.min(4, Math.max(1, Math.round(numeric)));
+    }
+    const textValue = String(value).trim();
+    if (!textValue) return null;
+    if (/^\$+$/.test(textValue)) {
+      return Math.min(4, textValue.length);
+    }
+    const parsed = Number(textValue);
+    if (!Number.isNaN(parsed) && parsed > 0) {
+      return Math.min(4, Math.max(1, Math.round(parsed)));
+    }
+    return null;
   };
 
-  const getPriceLevelSymbol = (level) => {
-    const n = Number(level ?? 0);
-    return n > 0 ? '$'.repeat(n) : '—';
+  const getPriceLevelText = (level, display) => {
+    const texts = ['Budget-friendly', 'Moderate', 'Expensive', 'Luxury'];
+    const normalized = normalizePriceLevel(level ?? display);
+    if (normalized) {
+      return texts[normalized - 1] ?? 'Moderate';
+    }
+    return display || 'Unknown';
+  };
+
+  const getPriceLevelSymbol = (level, display) => {
+    if (display) return display;
+    const normalized = normalizePriceLevel(level);
+    return normalized ? '$'.repeat(normalized) : 'N/A';
   };
 
   const handleAddToTrip = () => {
@@ -102,7 +125,8 @@ const PlaceDetails = () => {
     );
   }
 
-  const heroImg = place.photo_url || place.imageUrl || '/placeholder.jpg';
+  const heroImg = place.imageUrl || '/placeholder.jpg';
+
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -121,7 +145,7 @@ const PlaceDetails = () => {
           alt={place.name}
           className="w-full h-full object-cover"
         />
-        <div className="gradient-overlay" />
+        <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent" />
 
         <button
           onClick={() => navigate(-1)}
@@ -150,12 +174,12 @@ const PlaceDetails = () => {
       <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-12">
           <div className="lg:col-span-2">
-            <div className="card p-8 mb-8">
+            <div className="bg-white rounded-xl shadow p-8 mb-8">
               <h2 className="text-2xl font-bold text-gray-900 mb-4">About this destination</h2>
               <p className="text-gray-700 text-lg leading-relaxed">{place.description || 'No description available.'}</p>
             </div>
 
-            <div className="card p-8">
+            <div className="bg-white rounded-xl shadow p-8">
               <h3 className="text-xl font-bold text-gray-900 mb-6">Quick Facts</h3>
               <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                 <div className="text-center p-4 bg-gray-50 rounded-lg">
@@ -166,9 +190,9 @@ const PlaceDetails = () => {
                 <div className="text-center p-4 bg-gray-50 rounded-lg">
                   <CurrencyDollarIcon className="h-8 w-8 text-green-500 mx-auto mb-2" />
                   <div className="text-2xl font-bold text-gray-900">
-                    {getPriceLevelSymbol(place.priceLevel)}
+                    {getPriceLevelSymbol(place.priceLevel, place.priceDisplay)}
                   </div>
-                  <div className="text-sm text-gray-600">{getPriceLevelText(place.priceLevel)}</div>
+                  <div className="text-sm text-gray-600">{getPriceLevelText(place.priceLevel, place.priceDisplay)}</div>
                 </div>
                 <div className="text-center p-4 bg-gray-50 rounded-lg">
                   <MapPinIcon className="h-8 w-8 text-adventure-500 mx-auto mb-2" />
@@ -177,10 +201,10 @@ const PlaceDetails = () => {
                 </div>
               </div>
 
-              {place.directions_url && (
+              {place.mapsUrl && (
                 <div className="mt-6">
                   <a
-                    href={place.directions_url}
+                    href={place.mapsUrl}
                     target="_blank"
                     rel="noreferrer"
                     className="btn-secondary inline-block"
@@ -193,7 +217,7 @@ const PlaceDetails = () => {
           </div>
 
           <div className="lg:col-span-1">
-            <div className="card p-6 sticky top-8">
+            <div className="bg-white rounded-xl shadow p-6 sticky top-8">
               <h3 className="text-xl font-bold text-gray-900 mb-4">Add to Trip</h3>
 
               {trips.length === 0 ? (

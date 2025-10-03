@@ -4,7 +4,7 @@ import PlaceCard from '../components/PlaceCard';
 import Toast from '../components/Toast';
 import { storage } from '../lib/storage';
 import { MagnifyingGlassIcon, AdjustmentsHorizontalIcon } from '@heroicons/react/24/outline';
-import { fetchPlaces } from '../lib/api';   // <-- new helper
+import { fetchPlaces } from '../lib/api';
 
 const Browse = () => {
   const [places, setPlaces] = useState([]);
