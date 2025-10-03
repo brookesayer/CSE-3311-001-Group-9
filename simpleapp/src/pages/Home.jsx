@@ -6,7 +6,7 @@ import PlaceCard from '../components/PlaceCard';
 import Toast from '../components/Toast';
 import { storage } from '../lib/storage';
 import { ArrowRightIcon } from '@heroicons/react/24/outline';
-import { fetchPlaces } from '../lib/api';   // <-- NEW
+import { fetchPlaces } from '../lib/api';
 
 const Home = () => {
   const [allPlaces, setAllPlaces] = useState([]);
@@ -107,11 +107,6 @@ const Home = () => {
             <ArrowRightIcon className="h-5 w-5" />
           </Link>
         </div>
-      </div>
-
-      <div className="bg-adventure-900 text-white py-16">
-        {/* unchanged trip planner promo */}
-        …
       </div>
     </div>
   );

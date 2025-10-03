@@ -22,7 +22,7 @@ export default function PlaceList() {
         <article key={p.id} style={{ border: "1px solid #3333", borderRadius: 12, overflow: "hidden" }}>
           <div style={{ aspectRatio: "4/3", background: "#eee" }}>
             <img
-              src={p.photo_url || "/placeholder.jpg"}
+              src={p.imageUrl || "/placeholder.jpg"}
               alt={p.name}
               style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }}
               loading="lazy"
@@ -32,7 +32,7 @@ export default function PlaceList() {
             <h3 style={{ margin: "0 0 8px" }}>{p.name}</h3>
             {p.address && <p style={{ margin: 0, color: "#555" }}>{p.address}</p>}
             <div style={{ marginTop: 10 }}>
-              <a href={p.directions_url} target="_blank" rel="noreferrer">Get Directions</a>
+              <a href={p.mapsUrl} target="_blank" rel="noreferrer">Get Directions</a>
             </div>
           </div>
         </article>
