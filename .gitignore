@@ -19,8 +19,7 @@ env/
 venv/
 
 # Local DB / SQLite
-*.sqlite3
-*.db
+
 
 # Environment variables
 .env
