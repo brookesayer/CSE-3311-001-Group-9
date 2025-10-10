@@ -1,0 +1,25 @@
+version: "3.9"
+
+services:
+  backend:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    environment:
+      - USE_DB=1
+      - DATABASE_URL=sqlite:////app/dev.db
+    volumes:
+      # Mount the project's dev.db into the container for reliable Windows pathing
+      - ./dev.db:/app/dev.db
+    ports:
+      - "8000:8000"
+    restart: unless-stopped
+  frontend:
+    build:
+      context: .
+      dockerfile: simpleapp/Dockerfile
+    depends_on:
+      - backend
+    ports:
+      - "8080:80"
+    restart: unless-stopped
