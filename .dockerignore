@@ -1,14 +1,37 @@
+# Global ignores to keep Docker build contexts lean and fast
+
+# VCS
 .git
-__pycache__
-*.pyc
-.venv
-venv
+.gitignore
+
+# Node
 node_modules
 **/node_modules
 **/dist
-**/.vite
-*.log
-dev.db-wal
-dev.db-shm
+npm-debug.log*
+yarn-error.log*
+
+# Python cache
+__pycache__
+**/__pycache__
+*.pyc
+*.pyo
+*.pyd
+
+# Env and local configs
+.env
+**/.env
+*.env.local
+*.local
+
+# OS / editor
 .DS_Store
-backend/.env
+Thumbs.db
+*.swp
+*.swo
+
+# Databases / artifacts
+dev.db*
+*.sqlite
+*.sqlite3
+
