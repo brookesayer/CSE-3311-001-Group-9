@@ -1,6 +1,6 @@
 import sqlite3
 
-def empty_places(db_path="dev.db"):
+def empty_places(db_path="dfw_places.db"):
     conn = sqlite3.connect(db_path)
     cur = conn.cursor()
 
@@ -18,4 +18,4 @@ def empty_places(db_path="dev.db"):
     print("✅ places table emptied.")
 
 if __name__ == "__main__":
-    empty_places("dev.db")  # adjust if your DB file has a different name
+    empty_places("dfw_places.db")  # adjust if your DB file has a different name

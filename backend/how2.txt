@@ -14,11 +14,12 @@ pip install openai
 uvicorn backend.app:app --reload --env-file backend/.env
 
 # stop uvicorn first to avoid locks
-python -m backend.seed_places
-# Custom:
-python -m backend.seed_places --categories restaurants cafes bars --city "Arlington, TX"
-# Replace (wipe table first):
-python -m backend.seed_places --replace --categories restaurants parks museums
+# DFW‑tailored seed (defaults insert >30 places even without OpenAI):
+python -m backend.seed_places --replace
+
+# Custom examples:
+python -m backend.seed_places --categories restaurants cafes bars nightlife parks museums landmarks outdoors family neighborhoods shopping arts --city "Dallas-Fort Worth, TX Metroplex" --replace
+python -m backend.seed_from_json --file simpleapp/src/data/places.json --replace
 
 cd simpleapp
 npm install

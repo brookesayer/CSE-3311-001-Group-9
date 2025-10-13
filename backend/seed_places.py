@@ -30,16 +30,23 @@ def _retry_commit(db: Session):
             raise
     raise RuntimeError("Giving up after repeated database lock errors during commit")
 
-def seed_places(categories: List[str], city: str = "Arlington, TX", replace: bool = False) -> int:
+def seed_places(categories: List[str], city: str = "Dallas-Fort Worth, TX Metroplex", replace: bool = False) -> int:
     """
     Generate and insert places into SQLite.
     - categories: list of category names to generate
-    - city: default city context
+    - city: default city context (DFW by default)
     - replace: if True, wipe all existing rows first
 
     CHANGE: address is OPTIONAL at seed time; enrichment will fetch correct addresses
     via Google Maps APIs later.
     """
+    # Ensure correct schema: if replacing, drop and recreate the table to add new columns
+    if replace:
+        try:
+            with engine.begin() as conn:
+                conn.exec_driver_sql("DROP TABLE IF EXISTS places")
+        except Exception:
+            pass
     Base.metadata.create_all(bind=engine)
     inserted_total = 0
 
@@ -81,7 +88,7 @@ def seed_places(categories: List[str], city: str = "Arlington, TX", replace: boo
 
                     db.add(Place(
                         name=name,
-                        category=p.get("category") or cat,
+                        category=cat,  # keep category consistent with requested theme
                         description=description,
                         address=address,  # may be None; enrichment fills later
                         lat=p.get("lat"),
@@ -102,9 +109,18 @@ def seed_places(categories: List[str], city: str = "Arlington, TX", replace: boo
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("--categories", nargs="+", default=["restaurants", "parks", "museums"],
-                        help="List of categories to seed")
-    parser.add_argument("--city", default="Arlington, TX", help="City to generate places in")
+    parser.add_argument(
+        "--categories",
+        nargs="+",
+        default=[
+            # DFW‑tailored broad themes (aiming >30 total with fallback)
+            "restaurants", "cafes", "bars", "nightlife",
+            "parks", "museums", "landmarks", "outdoors",
+            "family", "neighborhoods", "shopping", "arts",
+        ],
+        help="List of categories (themes) to seed"
+    )
+    parser.add_argument("--city", default="Dallas-Fort Worth, TX Metroplex", help="City/region to generate places in")
     parser.add_argument("--replace", action="store_true", help="Wipe all rows before seeding")
     args = parser.parse_args()
 

@@ -21,8 +21,16 @@ USE_DB = os.getenv("USE_DB", "0") == "1"
 if USE_DB:
     from sqlalchemy import create_engine, text
     from sqlalchemy.orm import Session
+    from pathlib import Path as _Path
 
-    DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///./dev.db")
+    # Default to SQLite file in project root unless DATABASE_URL is provided.
+    _project_root = _Path(__file__).resolve().parent.parent
+    _default_sqlite_url = f"sqlite:///{(_project_root / 'dev.db').as_posix()}"
+    _env_url = os.getenv("DATABASE_URL", "")
+    if _env_url and ("postgres" in _env_url) and ("@db:" in _env_url) and os.getenv("USE_DOCKER_DB", "0") != "1":
+        DATABASE_URL = _default_sqlite_url
+    else:
+        DATABASE_URL = _env_url or _default_sqlite_url
     engine = create_engine(DATABASE_URL, future=True)
 
 DATA_DIR = APP_DIR / 'data'
@@ -209,6 +217,49 @@ def get_places(request: Request):
 
     payload = [_normalize_place(item, base_url) for item in raw]
     return JSONResponse(content=payload, media_type="application/json")
+
+
+# Get a single place by ID
+@app.get("/api/places/{place_id}")
+def get_place(place_id: int, request: Request):
+    base_url = str(request.base_url).rstrip("/")
+
+    if USE_DB:
+        try:
+            with Session(engine) as db:  # type: ignore[misc]
+                row = db.execute(
+                    text(
+                        """
+                        SELECT *
+                        FROM places
+                        WHERE id = :pid
+                        """
+                    ),
+                    {"pid": place_id},
+                ).mappings().first()
+                if not row:
+                    return JSONResponse(status_code=404, content={"detail": "Not found"})
+                payload = _normalize_place(dict(row), base_url)
+                return JSONResponse(content=payload, media_type="application/json")
+        except Exception as exc:
+            print(f"[WARN] DB read by id failed, falling back to file: {exc}")
+
+    # file fallback
+    try:
+        raw = json.loads(_read_places_json_bytes().decode("utf-8"))
+    except Exception:
+        raw = []
+    if isinstance(raw, Mapping):
+        raw = [raw]
+    elif not isinstance(raw, list):
+        raw = []
+    for item in raw:
+        try:
+            if int(item.get("id")) == int(place_id):
+                return JSONResponse(content=_normalize_place(item, base_url), media_type="application/json")
+        except Exception:
+            continue
+    return JSONResponse(status_code=404, content={"detail": "Not found"})
 
 
 # Optional: expose the raw file as well for debugging

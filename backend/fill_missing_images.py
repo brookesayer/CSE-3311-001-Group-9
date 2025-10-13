@@ -3,12 +3,28 @@
 import argparse
 import sqlite3
 from pathlib import Path
+import os
 from typing import Iterable, Optional
 
 from slugify import slugify
 
 BACKEND_DIR = Path(__file__).resolve().parent
-DEFAULT_DB = BACKEND_DIR.parent / "dev.db"
+# Default DB path: project root dev.db, unless SQLITE_PATH or DATABASE_URL provided
+_project_db = BACKEND_DIR.parent / "dev.db"
+_env_sqlite = os.getenv("SQLITE_PATH")
+_env_dburl = os.getenv("DATABASE_URL", "")
+
+def _db_from_url(url: str) -> Path | None:
+    try:
+        if url.startswith("sqlite:///"):
+            # strip prefix and convert POSIX path to OS path
+            p = url.replace("sqlite:///", "", 1)
+            return Path(p)
+    except Exception:
+        pass
+    return None
+
+DEFAULT_DB = Path(_env_sqlite) if _env_sqlite else (_db_from_url(_env_dburl) or _project_db)
 STATIC_DIR = BACKEND_DIR / "static" / "places"
 
 SUPPORTED_EXTS = [".jpg", ".jpeg", ".png", ".webp"]

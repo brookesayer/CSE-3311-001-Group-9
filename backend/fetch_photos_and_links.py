@@ -24,7 +24,17 @@ API_KEY = os.getenv("GOOGLE_MAPS_API_KEY")
 if not API_KEY:
     raise RuntimeError("Set GOOGLE_MAPS_API_KEY in .env")
 
-DB_PATH = os.getenv("SQLITE_PATH", str(BACKEND_DIR.parent / "dev.db"))
+def _db_from_url(url: str) -> str | None:
+    try:
+        if url.startswith("sqlite:///"):
+            return url.replace("sqlite:///", "", 1)
+    except Exception:
+        pass
+    return None
+
+# Prefer explicit envs, then derive from DATABASE_URL, else default to project root dev.db
+_project_db = str((BACKEND_DIR.parent / "dev.db").resolve())
+DB_PATH = os.getenv("SQLITE_PATH") or _db_from_url(os.getenv("DATABASE_URL", "")) or _project_db
 IMAGES_DIR = BACKEND_DIR / "static" / "places"
 IMAGES_DIR.mkdir(parents=True, exist_ok=True)
 PUBLIC_BASE = (os.getenv("API_BASE_URL", "http://localhost:8000").rstrip("/")) + "/static/places"

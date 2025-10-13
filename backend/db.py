@@ -1,10 +1,26 @@
 # db.py
 import os
+from pathlib import Path
 from dotenv import load_dotenv
 from sqlalchemy import create_engine, event
 from sqlalchemy.orm import sessionmaker, declarative_base
+
 load_dotenv()
-DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///./dev.db")
+
+# Default DB path in the project home directory (override via DATABASE_URL)
+_project_root = Path(__file__).resolve().parent.parent
+_project_db_path = _project_root / "dev.db"
+_default_sqlite_url = f"sqlite:///{_project_db_path.as_posix()}"
+
+def _resolve_db_url() -> str:
+    env_url = os.getenv("DATABASE_URL", "")
+    # If a docker-only URL is present (host 'db') but we're not explicitly opting in,
+    # prefer the project-root SQLite to avoid connection errors.
+    if env_url and ("postgres" in env_url) and ("@db:" in env_url) and os.getenv("USE_DOCKER_DB", "0") != "1":
+        return _default_sqlite_url
+    return env_url or _default_sqlite_url
+
+DATABASE_URL = _resolve_db_url()
 print("Using database at:", DATABASE_URL)
 
 connect_args = {}
