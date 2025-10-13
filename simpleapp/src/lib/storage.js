@@ -1,4 +1,5 @@
 const STORAGE_KEY = 'travel_app_trips';
+const ACTIVE_TRIP_KEY = 'travel_app_active_trip';
 
 export const storage = {
   getTrips: () => {
@@ -8,6 +9,33 @@ export const storage = {
     } catch (error) {
       console.error('Error loading trips from localStorage:', error);
       return [];
+    }
+  },
+
+  getActiveTrip: () => {
+    try {
+      const activeTripId = localStorage.getItem(ACTIVE_TRIP_KEY);
+      if (!activeTripId) return null;
+
+      const trips = storage.getTrips();
+      return trips.find(trip => trip.id === activeTripId) || null;
+    } catch (error) {
+      console.error('Error loading active trip:', error);
+      return null;
+    }
+  },
+
+  setActiveTrip: (tripId) => {
+    try {
+      if (tripId) {
+        localStorage.setItem(ACTIVE_TRIP_KEY, tripId);
+      } else {
+        localStorage.removeItem(ACTIVE_TRIP_KEY);
+      }
+      return true;
+    } catch (error) {
+      console.error('Error setting active trip:', error);
+      return false;
     }
   },
 
@@ -24,7 +52,7 @@ export const storage = {
   createTrip: (tripData) => {
     const trips = storage.getTrips();
     const newTrip = {
-      id: Date.now().toString(),
+      id: `local-${Date.now()}`,
       name: tripData.name || 'Untitled Trip',
       description: tripData.description || '',
       places: [],
@@ -33,6 +61,12 @@ export const storage = {
     };
     trips.push(newTrip);
     storage.saveTrips(trips);
+
+    // Auto-set as active trip if it's the first trip
+    if (trips.length === 1) {
+      storage.setActiveTrip(newTrip.id);
+    }
+
     return newTrip;
   },
 

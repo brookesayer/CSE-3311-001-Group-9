@@ -1,145 +1,307 @@
-// src/lib/api.js
-const API_BASE = import.meta.env.VITE_API_BASE?.replace(/\/$/, '') || '';
+// Centralized API layer with backend + localStorage fallback
+import dfwPlaces from '../data/dfwPlaces';
 
-function url(p) {
-  return `${API_BASE}${p}`;
-}
+const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
 
-function ensureArray(data) {
-  if (Array.isArray(data)) return data;
-  if (data && typeof data === 'object') return [data];
-  return [];
-}
+// Helper to check if backend is available
+let backendAvailable = null;
 
-function derivePriceInfo(value) {
-  if (value == null) {
-    return null;
-  }
-  if (Array.isArray(value)) {
-    for (const item of value) {
-      const info = derivePriceInfo(item);
-      if (info) return info;
-    }
-    return null;
-  }
-  if (typeof value === 'object') {
-    const levelCandidate = value.priceLevel ?? value.level ?? null;
-    const displayCandidate = value.priceDisplay ?? value.display ?? null;
-    const normalizedLevel = Number.isFinite(levelCandidate) ? Number(levelCandidate) : null;
-    if (normalizedLevel && normalizedLevel > 0) {
-      return {
-        level: Math.round(normalizedLevel),
-        display: displayCandidate ?? '$'.repeat(Math.round(normalizedLevel)),
-      };
-    }
-    if (displayCandidate) {
-      return derivePriceInfo(displayCandidate) ?? { level: null, display: String(displayCandidate) };
-    }
-  }
-  if (typeof value === 'number') {
-    const level = Number.isFinite(value) && value > 0 ? Math.round(value) : null;
-    return level ? { level, display: '$'.repeat(level) } : null;
-  }
-  const textValue = String(value).trim();
-  if (!textValue) {
-    return null;
-  }
-  if (/^\$+$/.test(textValue)) {
-    const level = textValue.length;
-    return level ? { level, display: textValue } : null;
-  }
-  const numeric = Number(textValue);
-  if (!Number.isNaN(numeric) && numeric > 0) {
-    const level = Math.round(numeric);
-    return { level, display: '$'.repeat(level) };
-  }
-  return { level: null, display: textValue };
-}
+async function checkBackendAvailability() {
+  if (backendAvailable !== null) return backendAvailable;
 
-function normalizePlace(place) {
-  if (!place || typeof place !== 'object') return place;
-  const normalized = { ...place };
-
-  if (normalized.imageUrl == null) {
-    normalized.imageUrl = normalized.image_url ?? normalized.photo_url ?? null;
-  }
-
-  const priceCandidate =
-    normalized.priceDisplay ??
-    normalized.price_display ??
-    normalized.priceLevel ??
-    normalized.price_level ??
-    normalized.price ??
-    null;
-  const priceInfo = derivePriceInfo(priceCandidate);
-  if (priceInfo) {
-    normalized.priceLevel = priceInfo.level ?? null;
-    normalized.priceDisplay = priceInfo.display ?? null;
-  } else {
-    normalized.priceLevel = Number.isFinite(normalized.priceLevel) ? Number(normalized.priceLevel) : null;
-    normalized.priceDisplay = normalized.priceDisplay ?? normalized.price_display ?? null;
-  }
-  if (normalized.price_level == null && normalized.priceLevel != null) {
-    normalized.price_level = normalized.priceLevel;
-  }
-  if (normalized.price == null && normalized.priceDisplay) {
-    normalized.price = normalized.priceDisplay;
-  }
-
-  const mapsRaw =
-    normalized.mapsUrl ??
-    normalized.directionsUrl ??
-    normalized.directions_url ??
-    normalized.maps_url ??
-    null;
-  const mapLink =
-    typeof mapsRaw === 'string' ? mapsRaw.trim() : mapsRaw ?? null;
-
-  normalized.mapsUrl = mapLink || null;
-  normalized.directionsUrl = normalized.mapsUrl;
-  normalized.directions_url = normalized.mapsUrl;
-  normalized.maps_url = normalized.mapsUrl;
-
-  return normalized;
-}
-
-function normalizePlaces(data) {
-  return ensureArray(data).map((item) => normalizePlace(item));
-}
-
-/** Fetch from backend first; fall back to /places.json in /public for dev */
-export async function fetchPlaces() {
-  // Try backend
   try {
-    const res = await fetch(url('/api/places'), { cache: 'no-store' });
-    if (!res.ok) {
-      const t = await res.text();
-      console.error('API /api/places failed:', res.status, t);
-      throw new Error('API /api/places not OK');
-    }
-    const data = await res.json();
-    console.info(`Loaded ${Array.isArray(data) ? data.length : 0} places from backend`);
-    return normalizePlaces(data);
-  } catch (err) {
-    console.warn('Backend not reachable, falling back to /places.json', err);
+    const response = await fetch(`${API_URL}/api/health`, {
+      method: 'GET',
+      signal: AbortSignal.timeout(2000) // 2 second timeout
+    });
+    backendAvailable = response.ok;
+  } catch (error) {
+    backendAvailable = false;
   }
-
-  // Fallback
-  const res2 = await fetch('/places.json', { cache: 'no-store' });
-  if (!res2.ok) {
-    const t = await res2.text();
-    console.error('Fallback /places.json failed:', res2.status, t);
-    throw new Error('Failed to load places from API and /places.json');
-  }
-  const data2 = await res2.json();
-  const normalized = normalizePlaces(data2);
-  console.info(`Loaded ${normalized.length} places from /places.json`);
-  return normalized;
+  return backendAvailable;
 }
 
-/** Convenience: get a single place by id (number or string) */
+/**
+ * Get all DFW places with optional filters
+ * Tries backend first, falls back to local data
+ */
+export async function getPlaces(filters = {}) {
+  const { search = '', city = '', category = '', minRating = 0, maxPriceLevel = 4 } = filters;
+
+  try {
+    const isBackendUp = await checkBackendAvailability();
+
+    if (isBackendUp) {
+      const params = new URLSearchParams();
+      if (search) params.append('q', search);
+      if (city) params.append('city', city);
+      if (category) params.append('category', category);
+
+      const response = await fetch(`${API_URL}/api/places?${params.toString()}`, {
+        signal: AbortSignal.timeout(5000)
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        return filterPlaces(data, { search, city, category, minRating, maxPriceLevel });
+      }
+    }
+  } catch (error) {
+    console.warn('Backend unavailable, using local data:', error.message);
+  }
+
+  // Try backend-served JSON fallback, then local data
+  try {
+    const resp = await fetch(`${API_URL}/places.json`, { signal: AbortSignal.timeout(3000) });
+    if (resp.ok) {
+      const data = await resp.json();
+      return filterPlaces(data, { search, city, category, minRating, maxPriceLevel });
+    }
+  } catch {}
+
+  return filterPlaces(dfwPlaces, { search, city, category, minRating, maxPriceLevel });
+}
+
+/**
+ * Client-side filtering logic
+ */
+function filterPlaces(places, filters) {
+  let filtered = [...places];
+
+  if (filters.search) {
+    const searchLower = filters.search.toLowerCase();
+    filtered = filtered.filter(p =>
+      p.name.toLowerCase().includes(searchLower) ||
+      p.city.toLowerCase().includes(searchLower) ||
+      p.neighborhood.toLowerCase().includes(searchLower) ||
+      (p.description && p.description.toLowerCase().includes(searchLower))
+    );
+  }
+
+  if (filters.city && filters.city !== 'All') {
+    filtered = filtered.filter(p => p.city === filters.city);
+  }
+
+  if (filters.category && filters.category !== 'All') {
+    filtered = filtered.filter(p => p.category === filters.category);
+  }
+
+  if (filters.minRating > 0) {
+    filtered = filtered.filter(p => (p.rating || 0) >= filters.minRating);
+  }
+
+  if (filters.maxPriceLevel < 4) {
+    filtered = filtered.filter(p => (p.priceLevel || 1) <= filters.maxPriceLevel);
+  }
+
+  // Sort by rating desc
+  filtered.sort((a, b) => (b.rating || 0) - (a.rating || 0));
+
+  return filtered;
+}
+
+/**
+ * Get a single place by ID
+ */
+export async function getPlaceById(id) {
+  try {
+    const isBackendUp = await checkBackendAvailability();
+
+    if (isBackendUp) {
+      const response = await fetch(`${API_URL}/api/places/${id}`, {
+        signal: AbortSignal.timeout(5000)
+      });
+      if (response.ok) {
+        return await response.json();
+      }
+    }
+  } catch (error) {
+    console.warn('Backend unavailable, using local data');
+  }
+
+  // Try fallback JSON then local data
+  try {
+    const resp = await fetch(`${API_URL}/places.json`, { signal: AbortSignal.timeout(3000) });
+    if (resp.ok) {
+      const data = await resp.json();
+      return data.find(p => p.id === parseInt(id));
+    }
+  } catch {}
+
+  return dfwPlaces.find(p => p.id === parseInt(id));
+}
+
+/**
+ * Create a new trip
+ * Tries backend, falls back to localStorage
+ */
+export async function createTrip(payload) {
+  const tripData = {
+    title: payload.title || payload.name,
+    note: payload.note || payload.description || '',
+    places: []
+  };
+
+  try {
+    const isBackendUp = await checkBackendAvailability();
+
+    if (isBackendUp) {
+      const response = await fetch(`${API_URL}/api/trips`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(tripData),
+        signal: AbortSignal.timeout(5000)
+      });
+
+      if (response.ok) {
+        return await response.json();
+      }
+    }
+  } catch (error) {
+    console.warn('Backend unavailable, using localStorage');
+  }
+
+  // Fallback to localStorage
+  const localTrip = {
+    id: `local-${Date.now()}`,
+    name: tripData.title,
+    description: tripData.note,
+    places: [],
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString()
+  };
+
+  return localTrip;
+}
+
+/**
+ * Add a place to a trip
+ */
+export async function addPlaceToTrip(tripId, placeId) {
+  try {
+    const isBackendUp = await checkBackendAvailability();
+
+    if (isBackendUp && !tripId.startsWith('local-')) {
+      const response = await fetch(`${API_URL}/api/trips/${tripId}/places`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ place_id: placeId }),
+        signal: AbortSignal.timeout(5000)
+      });
+
+      if (response.ok) {
+        return await response.json();
+      }
+    }
+  } catch (error) {
+    console.warn('Backend unavailable for add place');
+  }
+
+  // For local trips or fallback, return success indicator
+  return { success: true, tripId, placeId };
+}
+
+/**
+ * Get a trip by ID
+ */
+export async function getTrip(tripId) {
+  try {
+    const isBackendUp = await checkBackendAvailability();
+
+    if (isBackendUp && !tripId.startsWith('local-')) {
+      const response = await fetch(`${API_URL}/api/trips/${tripId}`, {
+        signal: AbortSignal.timeout(5000)
+      });
+
+      if (response.ok) {
+        return await response.json();
+      }
+    }
+  } catch (error) {
+    console.warn('Backend unavailable for get trip');
+  }
+
+  return null;
+}
+
+/**
+ * Create a shareable link for a trip
+ */
+export async function createShareLink(tripId, tripData) {
+  try {
+    const isBackendUp = await checkBackendAvailability();
+
+    if (isBackendUp && !tripId.startsWith('local-')) {
+      const response = await fetch(`${API_URL}/api/share/${tripId}`, {
+        method: 'POST',
+        signal: AbortSignal.timeout(5000)
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        return `${window.location.origin}/share/${data.token}`;
+      }
+    }
+  } catch (error) {
+    console.warn('Backend unavailable for share');
+  }
+
+  // Fallback: create encoded token
+  const shareData = {
+    t: tripData.name || tripData.title,
+    d: tripData.description || tripData.note || '',
+    ids: (tripData.places || []).map(p => p.id)
+  };
+
+  const token = btoa(JSON.stringify(shareData));
+  return `${window.location.origin}/share/${token}`;
+}
+
+/**
+ * Decode a share token
+ */
+export function decodeShareToken(token) {
+  try {
+    const decoded = JSON.parse(atob(token));
+    return {
+      title: decoded.t,
+      description: decoded.d || '',
+      placeIds: decoded.ids || []
+    };
+  } catch (error) {
+    console.error('Failed to decode share token:', error);
+    return null;
+  }
+}
+
+/**
+ * Get local trips (for localStorage fallback)
+ */
+export function getLocalTrips() {
+  try {
+    const trips = localStorage.getItem('travel_app_trips');
+    return trips ? JSON.parse(trips) : [];
+  } catch (error) {
+    console.error('Error loading local trips:', error);
+    return [];
+  }
+}
+
+// Legacy compatibility - keep old function names
+export async function fetchPlaces(options = {}) {
+  return getPlaces({
+    search: options.q || '',
+    category: '',
+    city: '',
+    minRating: 0,
+    maxPriceLevel: 4
+  });
+}
+
 export async function fetchPlaceById(id) {
-  const all = await fetchPlaces();
-  const numId = Number(id);
-  return all.find((p) => Number(p.id) === numId);
+  return getPlaceById(id);
+}
+
+export async function checkHealth() {
+  return checkBackendAvailability();
 }

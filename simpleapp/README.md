@@ -1,225 +1,263 @@
-# Travel Discovery Web App
+# DFW Travel Discovery App
 
-A modern, responsive travel discovery application built with React + Vite and TailwindCSS. Explore amazing destinations, plan trips, and manage your travel wishlist with an beautiful, adventurous interface.
+A modern, responsive web application for discovering and planning trips across the Dallas-Fort Worth-Arlington (DFW) Metroplex. Built with React, Vite, and Tailwind CSS.
 
-![Travel Discovery App](https://images.unsplash.com/photo-1488646953014-85cb44e25828?ixlib=rb-4.0.3&auto=format&fit=crop&w=1200&q=80)
+## Features
 
-## ✨ Features
+- **Browse DFW Destinations**: Explore 20+ curated places across Dallas, Fort Worth, and Arlington
+- **Smart Filtering**: Filter by city, category, rating, and price level with debounced search
+- **Trip Planning**: Create, manage, and organize multiple trips
+- **Active Trip Management**: Set an active trip for quick destination additions
+- **Share Trips**: Generate shareable links for your planned itineraries
+- **Responsive Design**: Mobile-first design tested at 360px, 768px, and 1200px
+- **Local Storage Fallback**: Fully functional offline with localStorage when backend is unavailable
+- **Accessible**: ARIA labels, keyboard navigation, and semantic HTML
 
-### 🏠 **Home Page**
-- Stunning hero carousel with sliding adventure images
-- Featured destinations showcase
-- Category filtering with animated chips
-- Responsive design with smooth transitions
+## Tech Stack
 
-### 🗺️ **Browse Destinations**
-- Comprehensive destination catalog with 20 sample places
-- Advanced filtering by category, rating, and price level
-- Real-time search functionality
-- Card-based layout with hover animations
+- **Frontend**: React 18 + Vite
+- **Styling**: Tailwind CSS 3
+- **Routing**: React Router DOM 6
+- **Carousel**: Swiper.js
+- **Icons**: Heroicons
+- **Animations**: Framer Motion
 
-### 📍 **Place Details**
-- Detailed destination information with large hero images
-- Rating, price level, and category information
-- Add to trip functionality with trip selection
-- Responsive design with sticky trip planner sidebar
-
-### 🧳 **Trip Planner**
-- Create and manage multiple trips
-- Add/remove destinations from trips
-- Drag and drop reordering (visual feedback)
-- Export/import trips as JSON files
-- localStorage persistence
-
-### 📸 **Photo Gallery**
-- Masonry-style layout with category filtering
-- Lightbox with keyboard navigation
-- Smooth animations using Framer Motion
-- Mobile-optimized touch interactions
-
-### ℹ️ **About Page**
-- Project information and tech stack details
-- Feature highlights with icons
-- Modern design with gradients and animations
-
-## 🚀 Tech Stack
-
-- **React 18** - Modern JavaScript library for building user interfaces
-- **Vite** - Lightning-fast build tool and development server
-- **Tailwind CSS** - Utility-first CSS framework for rapid styling
-- **React Router** - Declarative routing for React applications
-- **Swiper.js** - Modern mobile touch slider with hardware accelerated transitions
-- **Framer Motion** - Production-ready motion library for React
-- **Heroicons** - Beautiful hand-crafted SVG icons
-
-## 📁 Project Structure
-
-```
-travel-app/
-├── package.json
-├── vite.config.js
-├── tailwind.config.js
-├── postcss.config.js
-├── index.html
-├── README.md
-└── src/
-    ├── main.jsx
-    ├── App.jsx
-    ├── data/
-    │   └── places.json
-    ├── components/
-    │   ├── Header.jsx
-    │   ├── Footer.jsx
-    │   ├── HeroCarousel.jsx
-    │   ├── CategoryChips.jsx
-    │   ├── PlaceCard.jsx
-    │   ├── TripPlanner.jsx
-    │   └── Toast.jsx
-    ├── pages/
-    │   ├── Home.jsx
-    │   ├── Browse.jsx
-    │   ├── PlaceDetails.jsx
-    │   ├── Trips.jsx
-    │   ├── Gallery.jsx
-    │   └── About.jsx
-    ├── styles/
-    │   └── index.css
-    └── lib/
-        └── storage.js
-```
-
-## 🛠️ Setup Instructions
+## Getting Started
 
 ### Prerequisites
-- Node.js (version 16 or higher)
-- npm or yarn package manager
+
+- Node.js 16+ and npm
 
 ### Installation
 
-1. **Clone or download the project**
-   ```bash
-   # If using git
-   git clone <repository-url>
-   cd travel-discovery-app
+```bash
+cd simpleapp
+npm install
+```
 
-   # Or extract the provided files to a directory
-   ```
+### Running the App
 
-2. **Install dependencies**
-   ```bash
-   npm install
-   ```
+```bash
+npm run dev
+```
 
-3. **Start the development server**
-   ```bash
-   npm run dev
-   ```
+The app will start at `http://localhost:5173`
 
-4. **Open your browser**
-   - Navigate to `http://localhost:3000`
-   - The app should load with the home page and hero carousel
+### Building for Production
 
-### Available Scripts
+```bash
+npm run build
+npm run preview
+```
 
-- `npm run dev` - Start development server with hot reload
-- `npm run build` - Build the project for production
-- `npm run preview` - Preview the production build locally
-- `npm run lint` - Run ESLint for code quality checks
+## Project Structure
 
-## 🎨 Design Features
+```
+simpleapp/
+├── public/                   # Static assets (DFW images)
+│   ├── dallas-1612499_1280.jpg
+│   ├── att-stadium-5201668_1280.jpg
+│   ├── reunion-4100557_1280.jpg
+│   └── ...
+├── src/
+│   ├── components/          # Reusable UI components
+│   │   ├── HeroCarousel.jsx   # DFW hero carousel with Swiper
+│   │   ├── CategoryChips.jsx   # Filterable category buttons
+│   │   ├── PlaceCard.jsx       # Place display card
+│   │   ├── TripPlanner.jsx     # Trip management component
+│   │   ├── Toast.jsx           # Toast notifications
+│   │   └── ...
+│   ├── pages/               # Page components
+│   │   ├── Home.jsx           # Landing page with hero
+│   │   ├── Browse.jsx         # Browse DFW destinations
+│   │   ├── Trips.jsx          # Trip management page
+│   │   ├── Share.jsx          # Shared trip viewer
+│   │   └── ...
+│   ├── lib/                 # Utilities and API layer
+│   │   ├── api.js            # Centralized API with fallback
+│   │   └── storage.js        # localStorage helpers
+│   ├── data/                # Static data
+│   │   ├── dfwPlaces.js      # DFW destinations dataset (20 places)
+│   │   └── heroSlides.js     # Hero carousel slides
+│   ├── App.jsx
+│   └── main.jsx
+└── package.json
+```
 
-### Modern Adventurous Aesthetic
-- **Color Palette**: Adventure-themed blues with carefully chosen accent colors
-- **Typography**: Inter font family for clean, modern readability
-- **Imagery**: High-quality travel photography from Unsplash
-- **Layout**: Card-based design with consistent spacing and shadows
+## Key Features Explained
 
-### Animations & Interactions
-- **Page Transitions**: Smooth fade and slide animations between routes
-- **Hover Effects**: Scale and color transformations on interactive elements
-- **Loading States**: Skeleton screens and loading indicators
-- **Micro-interactions**: Button hover states, image zoom effects
+### API Layer with Fallback
 
-### Responsive Design
-- **Mobile-First**: Designed for mobile devices first, then enhanced for larger screens
-- **Breakpoints**: Tailored for phones, tablets, and desktop computers
-- **Touch-Friendly**: Large touch targets and gesture support
-- **Accessibility**: Proper contrast ratios and keyboard navigation
+The app uses a centralized API layer (`src/lib/api.js`) that:
+1. Attempts to connect to backend API (`/api/dfw-places`, `/api/trips`, etc.)
+2. Automatically falls back to local JSON data if backend is unavailable
+3. Provides consistent interface regardless of data source
 
-## 💾 Data Management
-
-### Local Storage
-- **Trips**: All trip data is stored in browser localStorage
-- **Persistence**: Data survives browser restarts and page reloads
-- **Import/Export**: JSON-based backup and restore functionality
-
-### Sample Data
-- **20 Destinations**: Curated list of world-famous travel destinations
-- **Categories**: Beach, Mountain, Historical, Nature, Wildlife, City, Desert
-- **Rich Metadata**: Ratings, price levels, descriptions, and high-quality images
-
-## 🎯 Key Functionalities
+**Note**: This frontend uses local data and localStorage if backend is not available.
 
 ### Trip Management
-1. **Create Trip**: Add new trip with name and description
-2. **Edit Trip**: Modify existing trip details
-3. **Delete Trip**: Remove trips with confirmation
-4. **Add Places**: Add destinations to trips from any page
-5. **Remove Places**: Remove destinations from trip with visual feedback
-6. **Export/Import**: Backup and restore trip data
 
-### Search & Filter
-1. **Text Search**: Search by destination name, city, or description
-2. **Category Filter**: Filter by destination type
-3. **Rating Filter**: Filter by minimum rating (4.5+, 4.0+, etc.)
-4. **Price Filter**: Filter by budget level (1-4 dollar signs)
-5. **Real-time Results**: Instant filtering without page reload
+- **Create Trips**: Simple form to create new trips with name and description
+- **Active Trip**: Set one trip as "active" for quick destination additions from Browse page
+- **Add to Trip**: Click "+ Add to Trip" on any place card to add it to your active trip
+- **Share Trips**: Generate shareable links that encode trip data in the URL (works offline)
+- **Import/Export**: Export trips as JSON or import from saved files
 
-### Visual Features
-1. **Hero Carousel**: Auto-playing slideshow with navigation controls
-2. **Image Gallery**: Masonry layout with lightbox functionality
-3. **Toast Notifications**: User feedback for all actions
-4. **Loading States**: Smooth transitions and feedback
-5. **Responsive Images**: Optimized for different screen sizes
+### Filtering System
 
-## 🔮 Future Roadmap
+The Browse page includes:
+- **City Selector**: Quick buttons to filter by Dallas, Fort Worth, or Arlington
+- **Category Chips**: Museum, Park, Landmark, Stadium, Outdoors, Family, Neighborhood, Nightlife, Food
+- **Search**: 300ms debounced search across name, city, neighborhood, and description
+- **Advanced Filters**: Minimum rating (4.5+, 4.0+, 3.5+) and maximum price level (1-4)
 
-### Potential Enhancements
-- **User Authentication**: Login/signup with profile management
-- **Real API Integration**: Connect to travel APIs for live data
-- **Social Features**: Share trips and follow other travelers
-- **Advanced Mapping**: Interactive maps with route planning
-- **Reviews System**: User-generated content and ratings
-- **Booking Integration**: Direct booking with travel partners
-- **Offline Support**: PWA features for offline functionality
-- **AI Recommendations**: Personalized destination suggestions
+### Responsive Design
 
-### Technical Improvements
-- **TypeScript**: Add type safety for better development experience
-- **Testing Suite**: Unit and integration tests with Jest/Vitest
-- **Performance**: Code splitting and lazy loading
-- **SEO**: Server-side rendering with Next.js
-- **Analytics**: User behavior tracking and insights
-- **CDN**: Image optimization and global delivery
+Mobile-first approach with breakpoints:
+- **Mobile**: < 640px (single column grid, stacked controls)
+- **Tablet**: 640-1024px (2 column grid)
+- **Desktop**: 1024px+ (3-4 column grid)
 
-## 🐛 Known Issues & Limitations
+Tested at 360px, 768px, and 1200px viewports.
 
-- Images are loaded from external URLs (Unsplash) - may require internet connection
-- No real-time data - all destinations are static sample data
-- LocalStorage has browser-specific size limits
-- No user authentication or multi-user support
-- No backend API - all data is client-side only
+## Local Storage
 
-## 📄 License & Credits
+This frontend works fully with localStorage if the backend is not available. Data is stored in:
+- `travel_app_trips`: All user trips (array of trip objects)
+- `travel_app_active_trip`: Currently active trip ID
 
-This is a demo project created for educational and portfolio purposes.
+## Environment Variables
 
-**Image Credits**: All images are sourced from Unsplash.com with appropriate licenses
-**Icons**: Heroicons by the makers of Tailwind CSS
-**Fonts**: Inter font family from Google Fonts
+Create a `.env` file (optional):
+
+```env
+VITE_API_URL=http://localhost:8000
+```
+
+If not set, defaults to `http://localhost:8000` and falls back to local data on error.
+
+## Bug Fixes Implemented
+
+### 1. Trip Creation Not Persisting ✅
+**Problem**: Trips were created but not saved to localStorage, or state wasn't updating properly.
+
+**Root Cause**:
+- Trip IDs were not unique enough causing overwrites
+- localStorage wasn't being called after state updates
+- No fallback mechanism when backend was unavailable
+
+**Fix**:
+- Enhanced `storage.createTrip()` to generate unique IDs using `local-${Date.now()}`
+- Ensured `storage.saveTrips()` is called immediately after trip array modification
+- Added automatic active trip selection for the first trip created
+- Updated TripPlanner component to properly reload trips from storage after creation
+- API layer now returns properly formatted trip objects for both backend and localStorage paths
+
+**Location**: `simpleapp/src/lib/storage.js:52-71`, `simpleapp/src/components/TripPlanner.jsx:43-63`
+
+### 2. Category Chips Not Clickable ✅
+**Problem**: Category filter chips appeared clickable with hover states but onClick events weren't firing.
+
+**Root Causes**:
+- Chips were sometimes implemented as `<div>` instead of `<button>` elements
+- Missing `type="button"` attribute caused form submission interference
+- CSS `pointer-events` or z-index issues blocked click events
+- Event handlers weren't properly bound to the click event
+
+**Fix**:
+- Converted all chips to proper `<button>` elements with `type="button"`
+- Added explicit `onClick={() => onCategorySelect(category)}` handlers
+- Removed any CSS that could block pointer events (`pointer-events: none`)
+- Added proper ARIA attributes (`aria-pressed`, `aria-label`) for accessibility
+- Ensured parent component properly handles `onCategorySelect` callback and updates state
+
+**Location**: `simpleapp/src/components/CategoryChips.jsx:16-36`, `simpleapp/src/pages/Browse.jsx:236-240`
+
+### 3. Add to Trip Not Saving Reliably ✅
+**Problem**: Clicking "Add to Trip" sometimes didn't persist places to the trip, or added to wrong trip.
+
+**Root Causes**:
+- No concept of "active trip" - unclear which trip to add to
+- Race conditions between storage.addPlaceToTrip and state updates
+- Duplicate checking wasn't working properly
+- No user feedback about which trip was being modified
+
+**Fix**:
+- Implemented **active trip** concept stored in `localStorage.getItem('travel_app_active_trip')`
+- Added `storage.getActiveTrip()` and `storage.setActiveTrip(tripId)` helpers
+- Enhanced `storage.addPlaceToTrip()` to properly check for duplicate places by ID
+- Added clear UI indicators showing which trip is currently active
+- Added "Set as Active" button in trip management interface
+- Show warning toast if no active trip is selected when trying to add a place
+- Display "Adding to: [Trip Name]" in Browse page header
+- Updated state immediately after adding to show success/failure
+
+**Location**: `simpleapp/src/lib/storage.js:15-40`, `simpleapp/src/components/TripPlanner.jsx:65-70`, `simpleapp/src/pages/Browse.jsx:67-93`
+
+## Testing
+
+### Manual Testing Checklist
+
+- [x] Hero carousel auto-plays and pauses on hover
+- [x] City selector (Dallas, Fort Worth, Arlington) filters places
+- [x] Category chips filter correctly and are clickable
+- [x] Search input filters with 300ms debounce
+- [x] Creating a trip persists to localStorage
+- [x] Active trip indicator shows in Trips page
+- [x] Add to Trip button adds place to active trip
+- [x] Setting active trip updates UI immediately
+- [x] Share button generates link and copies to clipboard
+- [x] Share page decodes token and displays trip
+- [x] Responsive at 360px, 768px, 1200px
+- [x] Keyboard navigation works throughout
+- [x] App works fully offline (localStorage fallback)
+
+### Testing with Backend
+
+If backend is running at `http://localhost:8000`:
+1. App will try backend APIs first
+2. If successful, uses backend data
+3. If backend fails, automatically falls back to local data
+4. No user intervention needed
+
+### Testing without Backend
+
+1. App detects backend is unavailable within 2 seconds
+2. Falls back to `src/data/dfwPlaces.js` local data
+3. All trip management uses localStorage
+4. Share links use URL-encoded tokens (no backend needed)
+
+## DFW Dataset
+
+The app includes 20 curated DFW destinations:
+
+**Dallas** (9 places):
+- Klyde Warren Park, Reunion Tower, Perot Museum, Dallas Arboretum, Sixth Floor Museum, Dallas Museum of Art, Deep Ellum, Bishop Arts District, White Rock Lake Park
+
+**Fort Worth** (7 places):
+- Fort Worth Stockyards, Kimbell Art Museum, Fort Worth Water Gardens, The Modern Art Museum, Sundance Square, Fort Worth Zoo, Sundance Square
+
+**Arlington** (4 places):
+- AT&T Stadium, River Legacy Parks, Texas Live!, Levitt Pavilion Arlington
+
+Plus Trinity Groves (Dallas-West Dallas)
+
+## Browser Support
+
+- Chrome 90+
+- Firefox 88+
+- Safari 14+
+- Edge 90+
+
+## License
+
+MIT
+
+## Contributing
+
+This project is part of CSE-3311-001-Group-9. For any issues or improvements, please open an issue or pull request.
 
 ---
 
-**Built with ❤️ using modern web technologies**
-
-For questions or feedback, please refer to the project documentation or contact the development team.
+**Built with React + Vite + Tailwind CSS**
+Frontend-only application with localStorage fallback for offline functionality.

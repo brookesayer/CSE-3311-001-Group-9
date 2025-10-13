@@ -8,6 +8,7 @@ import PlaceDetails from './pages/PlaceDetails';
 import Trips from './pages/Trips';
 import Gallery from './pages/Gallery';
 import About from './pages/About';
+import Share from './pages/Share';
 
 function App() {
   return (
@@ -92,6 +93,19 @@ function App() {
                     transition={{ duration: 0.3 }}
                   >
                     <About />
+                  </motion.div>
+                }
+              />
+              <Route
+                path="/share/:token"
+                element={
+                  <motion.div
+                    initial={{ opacity: 0, y: 20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: -20 }}
+                    transition={{ duration: 0.3 }}
+                  >
+                    <Share />
                   </motion.div>
                 }
               />

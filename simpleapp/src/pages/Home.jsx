@@ -5,11 +5,10 @@ import CategoryChips from '../components/CategoryChips';
 import PlaceCard from '../components/PlaceCard';
 import Toast from '../components/Toast';
 import { storage } from '../lib/storage';
-import { ArrowRightIcon } from '@heroicons/react/24/outline';
 import { fetchPlaces } from '../lib/api';
+import { ArrowRightIcon } from '@heroicons/react/24/outline';
 
 const Home = () => {
-  const [allPlaces, setAllPlaces] = useState([]);
   const [featuredPlaces, setFeaturedPlaces] = useState([]);
   const [selectedCategory, setSelectedCategory] = useState('All');
   const [toast, setToast] = useState(null);
@@ -18,20 +17,24 @@ const Home = () => {
   const categories = ['All', 'Beach', 'Mountain', 'Historical', 'Nature', 'Wildlife'];
 
   useEffect(() => {
-    (async () => {
+    const loadFeaturedPlaces = async () => {
       try {
-        const data = await fetchPlaces();
-        setAllPlaces(data);
-
-        // choose top 6 by rating
-        const topRated = [...data].sort((a, b) => (b.rating ?? 0) - (a.rating ?? 0)).slice(0, 6);
-        setFeaturedPlaces(topRated);
-      } catch (e) {
-        console.error("Failed to load places", e);
+        setLoading(true);
+        const data = await fetchPlaces({ limit: 100 });
+        // Sort by rating if available, otherwise just show first 6
+        const topPlaces = data
+          .sort((a, b) => (b.rating || 0) - (a.rating || 0))
+          .slice(0, 6);
+        setFeaturedPlaces(topPlaces);
+      } catch (err) {
+        console.error('Failed to load featured places:', err);
+        setFeaturedPlaces([]);
       } finally {
         setLoading(false);
       }
-    })();
+    };
+
+    loadFeaturedPlaces();
   }, []);
 
   const filteredPlaces = selectedCategory === 'All'
@@ -55,10 +58,6 @@ const Home = () => {
     }
   };
 
-  if (loading) {
-    return <div className="p-12 text-center text-gray-500">Loading featured destinations…</div>;
-  }
-
   return (
     <div className="min-h-screen">
       {toast && (
@@ -74,11 +73,11 @@ const Home = () => {
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-16">
         <div className="text-center mb-12">
           <h2 className="text-4xl font-bold text-gray-900 mb-4">
-            Explore Dallas–Fort Worth
+            Featured DFW Destinations
           </h2>
           <p className="text-xl text-gray-600 max-w-3xl mx-auto">
-            Skylines, stockyards, stadiums, arts, and amazing food across Dallas,
-            Fort Worth, and Arlington. Plan the perfect DFW day trip or weekend.
+            Discover the best of Dallas, Fort Worth, and Arlington. From world-class museums to
+            urban parks, vibrant neighborhoods to iconic landmarks. Start planning your North Texas adventure today.
           </p>
         </div>
 
@@ -103,9 +102,42 @@ const Home = () => {
             to="/browse"
             className="inline-flex items-center space-x-2 btn-primary text-lg px-8 py-3"
           >
-            <span>Browse DFW Spots</span>
+            <span>Explore All Destinations</span>
             <ArrowRightIcon className="h-5 w-5" />
           </Link>
+        </div>
+      </div>
+
+      <div className="bg-adventure-900 text-white py-16">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-12 items-center">
+            <div>
+              <h2 className="text-4xl font-bold mb-6">
+                Plan Your Perfect DFW Trip
+              </h2>
+              <p className="text-xl text-adventure-100 mb-8">
+                Create custom itineraries across Dallas, Fort Worth, and Arlington.
+                Save your favorite North Texas destinations and share your plans with friends.
+                Make the most of your Metroplex experience.
+              </p>
+              <div className="flex flex-col sm:flex-row gap-4">
+                <Link to="/trips" className="btn-primary bg-white text-adventure-900 hover:bg-gray-100">
+                  Start Planning
+                </Link>
+                <Link to="/browse" className="btn-secondary border-white text-white hover:bg-white hover:text-adventure-900">
+                  Browse DFW
+                </Link>
+              </div>
+            </div>
+            <div className="relative">
+              <img
+                src="https://images.unsplash.com/photo-1488646953014-85cb44e25828?ixlib=rb-4.0.3&auto=format&fit=crop&w=1000&q=80"
+                alt="Travel planning"
+                className="rounded-xl shadow-2xl"
+              />
+              <div className="absolute inset-0 bg-gradient-to-tr from-adventure-900/20 to-transparent rounded-xl"></div>
+            </div>
+          </div>
         </div>
       </div>
     </div>

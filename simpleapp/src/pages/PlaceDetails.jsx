@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { storage } from '../lib/storage';
+import { fetchPlaceById } from '../lib/api';
 import Toast from '../components/Toast';
 import {
   StarIcon,
@@ -10,80 +11,59 @@ import {
   ArrowLeftIcon,
   CheckIcon
 } from '@heroicons/react/24/solid';
-import { fetchPlaceById } from '../lib/api';
 
 const PlaceDetails = () => {
   const { id } = useParams();
   const navigate = useNavigate();
-
   const [place, setPlace] = useState(null);
   const [trips, setTrips] = useState([]);
   const [selectedTripId, setSelectedTripId] = useState('');
   const [toast, setToast] = useState(null);
   const [isAdded, setIsAdded] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
 
-  // Load place + trips
   useEffect(() => {
-    let active = true;
-    (async () => {
+    const loadPlace = async () => {
       try {
-        const p = await fetchPlaceById(id);
-        if (active) setPlace(p || null);
+        setLoading(true);
+        setError(null);
+        const data = await fetchPlaceById(parseInt(id));
+        setPlace(data);
+      } catch (err) {
+        setError('Failed to load place details.');
+        console.error(err);
       } finally {
-        if (active) setLoading(false);
+        setLoading(false);
       }
-    })();
+    };
+
+    loadPlace();
 
     const savedTrips = storage.getTrips();
     setTrips(savedTrips);
-    if (savedTrips.length > 0) setSelectedTripId(savedTrips[0].id);
-
-    return () => { active = false; };
+    if (savedTrips.length > 0) {
+      setSelectedTripId(savedTrips[0].id);
+    }
   }, [id]);
 
-  // Check if already in selected trip
   useEffect(() => {
     if (place && selectedTripId) {
       const trip = trips.find(t => t.id === selectedTripId);
       if (trip) {
-        const already = trip.places.some(p => Number(p.id) === Number(place.id));
-        setIsAdded(already);
+        const alreadyAdded = trip.places.some(p => p.id === place.id);
+        setIsAdded(alreadyAdded);
       }
     }
   }, [place, selectedTripId, trips]);
 
-  const normalizePriceLevel = (value) => {
-    if (value == null) return null;
-    const numeric = Number(value);
-    if (!Number.isNaN(numeric) && Number.isFinite(numeric) && numeric > 0) {
-      return Math.min(4, Math.max(1, Math.round(numeric)));
-    }
-    const textValue = String(value).trim();
-    if (!textValue) return null;
-    if (/^\$+$/.test(textValue)) {
-      return Math.min(4, textValue.length);
-    }
-    const parsed = Number(textValue);
-    if (!Number.isNaN(parsed) && parsed > 0) {
-      return Math.min(4, Math.max(1, Math.round(parsed)));
-    }
-    return null;
-  };
-
-  const getPriceLevelText = (level, display) => {
+  const getPriceLevelText = (level) => {
     const texts = ['Budget-friendly', 'Moderate', 'Expensive', 'Luxury'];
-    const normalized = normalizePriceLevel(level ?? display);
-    if (normalized) {
-      return texts[normalized - 1] ?? 'Moderate';
-    }
-    return display || 'Unknown';
+    return texts[level - 1] || 'Unknown';
   };
 
-  const getPriceLevelSymbol = (level, display) => {
-    if (display) return display;
-    const normalized = normalizePriceLevel(level);
-    return normalized ? '$'.repeat(normalized) : 'N/A';
+  const getPriceLevelSymbol = (level) => {
+    return '$'.repeat(level);
   };
 
   const handleAddToTrip = () => {
@@ -91,7 +71,6 @@ const PlaceDetails = () => {
       setToast({ message: 'Please select a trip first!', type: 'warning' });
       return;
     }
-    if (!place) return;
 
     const success = storage.addPlaceToTrip(selectedTripId, place);
     const trip = trips.find(t => t.id === selectedTripId);
@@ -105,18 +84,31 @@ const PlaceDetails = () => {
     }
   };
 
-  const handleCreateNewTrip = () => navigate('/trips');
+  const handleCreateNewTrip = () => {
+    navigate('/trips');
+  };
 
   if (loading) {
-    return <div className="min-h-screen flex items-center justify-center text-gray-500">Loading place…</div>;
-  }
-
-  if (!place) {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <div className="text-center">
-          <h2 className="text-2xl font-bold text-gray-900 mb-2">Place not found</h2>
-          <p className="text-gray-600 mb-4">The destination you’re looking for doesn’t exist.</p>
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-adventure-600 mx-auto mb-4"></div>
+          <p className="text-gray-600">Loading place details...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (error || !place) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="text-center">
+          <h2 className="text-2xl font-bold text-gray-900 mb-2">
+            {error || 'Place not found'}
+          </h2>
+          <p className="text-gray-600 mb-4">
+            {error ? 'Please try again later.' : "The destination you're looking for doesn't exist."}
+          </p>
           <button onClick={() => navigate('/browse')} className="btn-primary">
             Browse Destinations
           </button>
@@ -124,9 +116,6 @@ const PlaceDetails = () => {
       </div>
     );
   }
-
-  const heroImg = place.imageUrl || '/placeholder.jpg';
-
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -138,14 +127,17 @@ const PlaceDetails = () => {
         />
       )}
 
-      {/* Hero */}
-      <div className="relative h-96 overflow-hidden">
-        <img
-          src={heroImg}
-          alt={place.name}
-          className="w-full h-full object-cover"
-        />
-        <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent" />
+      <div className="relative h-96 overflow-hidden bg-gray-900">
+        {place.imageUrl ? (
+          <img
+            src={place.imageUrl}
+            alt={place.name}
+            className="w-full h-full object-cover"
+          />
+        ) : (
+          <div className="w-full h-full bg-gradient-to-br from-adventure-600 to-adventure-800" />
+        )}
+        <div className="gradient-overlay" />
 
         <button
           onClick={() => navigate(-1)}
@@ -161,63 +153,75 @@ const PlaceDetails = () => {
             </span>
           )}
           <h1 className="text-4xl md:text-5xl font-bold mb-2">{place.name}</h1>
-          {(place.city || place.address) && (
+          {place.address && (
             <div className="flex items-center text-lg">
               <MapPinIcon className="h-5 w-5 mr-2" />
-              <span>{place.city || place.address}</span>
+              <span>{place.address}</span>
             </div>
           )}
+          {(() => {
+            const mapsUrl = place.mapsUrl || (place.lat && place.lon
+              ? `https://www.google.com/maps/dir/?api=1&destination=${place.lat},${place.lon}`
+              : (place.address ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(place.address)}` : null));
+            return mapsUrl ? (
+              <div className="mt-3">
+                <a
+                  href={mapsUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center px-3 py-1 rounded-full bg-white/20 backdrop-blur-sm hover:bg-white/30 text-white text-sm font-medium transition"
+                >
+                  <MapPinIcon className="h-4 w-4 mr-2" />
+                  Open in Google Maps
+                </a>
+              </div>
+            ) : null;
+          })()}
         </div>
       </div>
 
-      {/* Content */}
       <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-12">
           <div className="lg:col-span-2">
-            <div className="bg-white rounded-xl shadow p-8 mb-8">
+            <div className="card p-8 mb-8">
               <h2 className="text-2xl font-bold text-gray-900 mb-4">About this destination</h2>
-              <p className="text-gray-700 text-lg leading-relaxed">{place.description || 'No description available.'}</p>
+              <p className="text-gray-700 text-lg leading-relaxed">{place.description}</p>
             </div>
 
-            <div className="bg-white rounded-xl shadow p-8">
-              <h3 className="text-xl font-bold text-gray-900 mb-6">Quick Facts</h3>
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                <div className="text-center p-4 bg-gray-50 rounded-lg">
-                  <StarIcon className="h-8 w-8 text-yellow-400 mx-auto mb-2" />
-                  <div className="text-2xl font-bold text-gray-900">{place.rating ?? '—'}</div>
-                  <div className="text-sm text-gray-600">Rating</div>
-                </div>
-                <div className="text-center p-4 bg-gray-50 rounded-lg">
-                  <CurrencyDollarIcon className="h-8 w-8 text-green-500 mx-auto mb-2" />
-                  <div className="text-2xl font-bold text-gray-900">
-                    {getPriceLevelSymbol(place.priceLevel, place.priceDisplay)}
-                  </div>
-                  <div className="text-sm text-gray-600">{getPriceLevelText(place.priceLevel, place.priceDisplay)}</div>
-                </div>
-                <div className="text-center p-4 bg-gray-50 rounded-lg">
-                  <MapPinIcon className="h-8 w-8 text-adventure-500 mx-auto mb-2" />
-                  <div className="text-lg font-bold text-gray-900">{place.category || '—'}</div>
-                  <div className="text-sm text-gray-600">Category</div>
+            {(place.rating || place.priceLevel || place.category) && (
+              <div className="card p-8">
+                <h3 className="text-xl font-bold text-gray-900 mb-6">Quick Facts</h3>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                  {place.rating && (
+                    <div className="text-center p-4 bg-gray-50 rounded-lg">
+                      <StarIcon className="h-8 w-8 text-yellow-400 mx-auto mb-2" />
+                      <div className="text-2xl font-bold text-gray-900">{place.rating}</div>
+                      <div className="text-sm text-gray-600">Rating</div>
+                    </div>
+                  )}
+                  {place.priceLevel && (
+                    <div className="text-center p-4 bg-gray-50 rounded-lg">
+                      <CurrencyDollarIcon className="h-8 w-8 text-green-500 mx-auto mb-2" />
+                      <div className="text-2xl font-bold text-gray-900">
+                        {getPriceLevelSymbol(place.priceLevel)}
+                      </div>
+                      <div className="text-sm text-gray-600">{getPriceLevelText(place.priceLevel)}</div>
+                    </div>
+                  )}
+                  {place.category && (
+                    <div className="text-center p-4 bg-gray-50 rounded-lg">
+                      <MapPinIcon className="h-8 w-8 text-adventure-500 mx-auto mb-2" />
+                      <div className="text-lg font-bold text-gray-900">{place.category}</div>
+                      <div className="text-sm text-gray-600">Category</div>
+                    </div>
+                  )}
                 </div>
               </div>
-
-              {place.mapsUrl && (
-                <div className="mt-6">
-                  <a
-                    href={place.mapsUrl}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="btn-secondary inline-block"
-                  >
-                    Open in Google Maps
-                  </a>
-                </div>
-              )}
-            </div>
+            )}
           </div>
 
           <div className="lg:col-span-1">
-            <div className="bg-white rounded-xl shadow p-6 sticky top-8">
+            <div className="card p-6 sticky top-8">
               <h3 className="text-xl font-bold text-gray-900 mb-4">Add to Trip</h3>
 
               {trips.length === 0 ? (
@@ -282,7 +286,6 @@ const PlaceDetails = () => {
               )}
             </div>
           </div>
-
         </div>
       </div>
     </div>
