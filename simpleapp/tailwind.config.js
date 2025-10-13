@@ -7,14 +7,18 @@ export default {
   theme: {
     extend: {
       colors: {
+        // DFW-themed palette (primary: deep blue, accents available via 400)
         adventure: {
-          50: '#f0f9ff',
-          100: '#e0f2fe',
-          500: '#0ea5e9',
-          600: '#0284c7',
-          700: '#0369a1',
-          800: '#075985',
-          900: '#0c4a6e',
+          50: '#f2f6fb',
+          100: '#e6eef7',
+          200: '#c3d5ea',
+          300: '#9fbbdd',
+          400: '#6b95c8',
+          500: '#2f6fb2',
+          600: '#1f5a99',
+          700: '#164a80',
+          800: '#103a66',
+          900: '#0b2b4d',
         }
       },
       fontFamily: {

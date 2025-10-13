@@ -12,27 +12,27 @@ const HeroCarousel = () => {
   const heroImages = [
     {
       id: 1,
-      url: 'https://images.unsplash.com/photo-1506905925346-21bda4d32df4?ixlib=rb-4.0.3&auto=format&fit=crop&w=2070&q=80',
-      title: 'Discover Amazing Mountains',
-      subtitle: 'Experience breathtaking peaks and pristine wilderness'
+      url: 'https://source.unsplash.com/1600x900/?dallas,skyline',
+      title: 'Dallas Skyline at Dusk',
+      subtitle: 'Big Texas energy from Reunion Tower to Deep Ellum'
     },
     {
       id: 2,
-      url: 'https://images.unsplash.com/photo-1544551763-46a013bb70d5?ixlib=rb-4.0.3&auto=format&fit=crop&w=2070&q=80',
-      title: 'Explore Tropical Paradises',
-      subtitle: 'Crystal clear waters and endless adventures await'
+      url: 'https://source.unsplash.com/1600x900/?fort-worth,stockyards',
+      title: 'Fort Worth Stockyards',
+      subtitle: 'Western heritage, rodeos, live music, and longhorns'
     },
     {
       id: 3,
-      url: 'https://images.unsplash.com/photo-1539650116574-75c0c6d73f6e?ixlib=rb-4.0.3&auto=format&fit=crop&w=2070&q=80',
-      title: 'Journey Through Time',
-      subtitle: 'Discover ancient wonders and cultural treasures'
+      url: 'https://source.unsplash.com/1600x900/?arlington,stadium',
+      title: 'Arlington’s Stadiums',
+      subtitle: 'Game day vibes at world-class sports venues'
     },
     {
       id: 4,
-      url: 'https://images.unsplash.com/photo-1547036967-23d11aacaee0?ixlib=rb-4.0.3&auto=format&fit=crop&w=2070&q=80',
-      title: 'Wildlife Adventures',
-      subtitle: 'Get close to nature in its purest form'
+      url: 'https://source.unsplash.com/1600x900/?margaret-hunt-hill-bridge',
+      title: 'Iconic DFW Landmarks',
+      subtitle: 'From the Trinity River to the Arts District'
     }
   ];
 
@@ -79,7 +79,7 @@ const HeroCarousel = () => {
                     {image.subtitle}
                   </p>
                   <button className="btn-primary text-lg px-8 py-3 animate-scale-in">
-                    Start Exploring
+                    Discover DFW
                   </button>
                 </div>
               </div>

@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import { Bars3Icon, XMarkIcon, GlobeAltIcon } from '@heroicons/react/24/outline';
+import { Bars3Icon, XMarkIcon, BuildingOffice2Icon } from '@heroicons/react/24/outline';
 
 const Header = () => {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
@@ -21,8 +21,8 @@ const Header = () => {
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex justify-between items-center py-4">
           <Link to="/" className="flex items-center space-x-2">
-            <GlobeAltIcon className="h-8 w-8 text-adventure-600" />
-            <span className="text-2xl font-bold text-gray-900">Travel Discovery</span>
+            <BuildingOffice2Icon className="h-8 w-8 text-adventure-600" />
+            <span className="text-2xl font-bold text-gray-900">DFW Explorer</span>
           </Link>
 
           <nav className="hidden md:flex space-x-8">

@@ -74,11 +74,11 @@ const Home = () => {
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-16">
         <div className="text-center mb-12">
           <h2 className="text-4xl font-bold text-gray-900 mb-4">
-            Featured Destinations
+            Explore Dallas–Fort Worth
           </h2>
           <p className="text-xl text-gray-600 max-w-3xl mx-auto">
-            Discover the world's most incredible places, from pristine beaches to majestic mountains.
-            Start planning your next adventure today.
+            Skylines, stockyards, stadiums, arts, and amazing food across Dallas,
+            Fort Worth, and Arlington. Plan the perfect DFW day trip or weekend.
           </p>
         </div>
 
@@ -103,7 +103,7 @@ const Home = () => {
             to="/browse"
             className="inline-flex items-center space-x-2 btn-primary text-lg px-8 py-3"
           >
-            <span>Explore All Destinations</span>
+            <span>Browse DFW Spots</span>
             <ArrowRightIcon className="h-5 w-5" />
           </Link>
         </div>
