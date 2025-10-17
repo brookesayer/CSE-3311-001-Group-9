@@ -7,7 +7,7 @@ from pathlib import Path
 from typing import Any
 from dotenv import load_dotenv
 
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, Request, Query
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
@@ -183,22 +183,55 @@ def health():
 
 
 @app.get("/api/places")
-def get_places(request: Request):
+def get_places(
+    request: Request,
+    sort: str | None = Query(None, description="Sort by: id,name,rating,price_level"),
+    order: str = Query("asc", description="asc or desc"),
+    city: str | None = Query(None, description="Filter by city name or slug"),
+    category: str | None = Query(None, description="Filter by category name or slug"),
+    limit: int | None = Query(None, ge=1, le=500, description="Max rows"),
+    offset: int = Query(0, ge=0, description="Row offset"),
+):
     """Return places enriched with absolute image URLs for the frontend."""
     base_url = str(request.base_url).rstrip("/")
 
     if USE_DB:
         try:
             with Session(engine) as db:  # type: ignore[misc]
-                rows = db.execute(
-                    text(
-                        """
-                        SELECT *
-                        FROM places
-                        ORDER BY id ASC
-                        """
+                # Build SQL safely using whitelisted columns
+                sort_map = {
+                    None: "id",
+                    "id": "id",
+                    "name": "name",
+                    "rating": "rating",
+                    "price_level": "price_level",
+                }
+                col = sort_map.get((sort or "").lower(), "id")
+                direction = "DESC" if str(order).lower() == "desc" else "ASC"
+
+                where = []
+                params: dict[str, object] = {}
+                if city:
+                    where.append(
+                        "(places.city = :city OR EXISTS (SELECT 1 FROM cities c WHERE c.id = places.city_id AND (c.slug = :city OR c.name = :city)))"
                     )
-                ).mappings().all()
+                    params["city"] = city
+                if category:
+                    where.append(
+                        "(places.category = :cat OR EXISTS (SELECT 1 FROM categories k WHERE k.id = places.category_id AND (k.slug = :cat OR k.name = :cat)))"
+                    )
+                    params["cat"] = category
+
+                sql = "SELECT * FROM places"
+                if where:
+                    sql += " WHERE " + " AND ".join(where)
+                sql += f" ORDER BY {col} {direction}, id ASC"
+                if limit is not None:
+                    sql += " LIMIT :limit OFFSET :offset"
+                    params["limit"] = int(limit)
+                    params["offset"] = int(offset)
+
+                rows = db.execute(text(sql), params).mappings().all()
                 payload = [_normalize_place(dict(row), base_url) for row in rows]
                 return JSONResponse(content=payload, media_type="application/json")
         except Exception as exc:
@@ -215,7 +248,23 @@ def get_places(request: Request):
     elif not isinstance(raw, list):
         raw = []
 
-    payload = [_normalize_place(item, base_url) for item in raw]
+    # Filters and sorting for file fallback
+    items = [_normalize_place(item, base_url) for item in raw]
+    if city:
+        c = city.lower()
+        items = [p for p in items if (str(p.get("city") or "").lower() == c)]
+    if category:
+        k = category.lower()
+        items = [p for p in items if (str(p.get("category") or "").lower() == k)]
+    if sort:
+        key = (sort or "").lower()
+        def _k(d):
+            v = d.get(key) if key in {"name", "rating", "price_level", "id"} else d.get("id")
+            return (v is None, v)
+        items = sorted(items, key=_k, reverse=(str(order).lower()=="desc"))
+    if limit is not None:
+        items = items[offset: offset + int(limit)]
+    payload = items
     return JSONResponse(content=payload, media_type="application/json")
 
 
@@ -268,3 +317,32 @@ def places_json_file():
     if DATA_FILE.exists():
         return FileResponse(DATA_FILE, media_type="application/json")
     return JSONResponse(content=[], media_type="application/json")
+
+
+@app.get("/api/cities")
+def list_cities():
+    """Return a simple list of city names/slugs for filters."""
+    if USE_DB:
+        try:
+            with Session(engine) as db:  # type: ignore[misc]
+                rows = db.execute(text("SELECT id, name, slug FROM cities ORDER BY name ASC")).mappings().all()
+                if rows:
+                    return rows
+                # Fallback to distinct from places.city if cities is empty
+                rows = db.execute(text("SELECT DISTINCT city AS name FROM places WHERE city IS NOT NULL AND city<>'' ORDER BY city ASC")).mappings().all()
+                return [{"id": None, "name": r["name"], "slug": None} for r in rows]
+        except Exception as exc:
+            print(f"[WARN] list_cities failed: {exc}")
+    # File fallback: derive from JSON
+    try:
+        raw = json.loads(_read_places_json_bytes().decode("utf-8"))
+    except Exception:
+        raw = []
+    if isinstance(raw, Mapping):
+        raw = [raw]
+    cities: dict[str, None] = {}
+    for item in raw:
+        val = (item.get("city") or item.get("address") or "").strip()
+        if val:
+            cities[val] = None
+    return [{"id": None, "name": name, "slug": None} for name in sorted(cities.keys())]

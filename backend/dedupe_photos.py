@@ -24,7 +24,7 @@ from sqlalchemy.orm import Session
 
 # Support running both as a module and as a script
 try:
-    from db import engine
+    from .db import engine
 except Exception:  # pragma: no cover - fallback when run as module
     from .db import engine
 
@@ -174,4 +174,3 @@ if __name__ == "__main__":
         print(f"[dry-run] Would update {updated} rows and delete {deleted} files")
     else:
         print(f"Updated {updated} rows and deleted {deleted} files")
-

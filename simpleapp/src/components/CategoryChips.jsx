@@ -31,7 +31,7 @@ const CategoryChips = ({ categories, selectedCategory, onCategorySelect }) => {
           <span className="text-base sm:text-lg" aria-hidden="true">
             {categoryIcons[category] || '📍'}
           </span>
-          <span>{category}</span>
+          <span className="capitalize">{category}</span>
         </button>
       ))}
     </div>

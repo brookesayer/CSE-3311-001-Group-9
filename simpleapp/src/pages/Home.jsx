@@ -14,7 +14,7 @@ const Home = () => {
   const [toast, setToast] = useState(null);
   const [loading, setLoading] = useState(true);
 
-  const categories = ['All', 'Beach', 'Mountain', 'Historical', 'Nature', 'Wildlife'];
+  const categories = ['All', 'restaurants', 'cafes', 'bars', 'nightlife', 'parks', 'museums', 'landmarks', 'outdoors', 'shopping', 'arts', 'family'];
 
   useEffect(() => {
     const loadFeaturedPlaces = async () => {
@@ -73,11 +73,10 @@ const Home = () => {
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-16">
         <div className="text-center mb-12">
           <h2 className="text-4xl font-bold text-gray-900 mb-4">
-            Featured DFW Destinations
+            Featured North Texas Destinations
           </h2>
           <p className="text-xl text-gray-600 max-w-3xl mx-auto">
-            Discover the best of Dallas, Fort Worth, and Arlington. From world-class museums to
-            urban parks, vibrant neighborhoods to iconic landmarks. Start planning your North Texas adventure today.
+            Discover top picks across Dallas, Fort Worth, Arlington, and beyond. From neighborhood eats to world‑class museums and parks, find places to add to your trip.
           </p>
         </div>
 

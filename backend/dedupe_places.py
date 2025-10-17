@@ -24,7 +24,7 @@ from sqlalchemy.orm import Session
 # Support running both as a module (python -m backend.dedupe_places)
 # and as a script (python backend/dedupe_places.py)
 try:  # absolute import when executed as a script
-    from db import engine
+    from .db import engine
 except Exception:  # fallback for package-style execution
     from .db import engine
 

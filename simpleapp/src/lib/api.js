@@ -26,7 +26,7 @@ async function checkBackendAvailability() {
  * Tries backend first, falls back to local data
  */
 export async function getPlaces(filters = {}) {
-  const { search = '', city = '', category = '', minRating = 0, maxPriceLevel = 4 } = filters;
+  const { search = '', city = '', category = '', minRating = 0, maxPriceLevel = 4, limit = 100, offset = 0 } = filters;
 
   try {
     const isBackendUp = await checkBackendAvailability();
@@ -34,8 +34,12 @@ export async function getPlaces(filters = {}) {
     if (isBackendUp) {
       const params = new URLSearchParams();
       if (search) params.append('q', search);
-      if (city) params.append('city', city);
-      if (category) params.append('category', category);
+      if (city && city !== 'All') params.append('city', city);
+      if (category && category !== 'All') params.append('category', category);
+      if (limit) params.append('limit', String(limit));
+      if (offset) params.append('offset', String(offset));
+      params.append('sort', 'rating');
+      params.append('order', 'desc');
 
       const response = await fetch(`${API_URL}/api/places?${params.toString()}`, {
         signal: AbortSignal.timeout(5000)
@@ -43,7 +47,8 @@ export async function getPlaces(filters = {}) {
 
       if (response.ok) {
         const data = await response.json();
-        return filterPlaces(data, { search, city, category, minRating, maxPriceLevel });
+        // Backend already applied pagination; still apply client filters if needed
+        return filterPlaces(data, { search, city, category, minRating, maxPriceLevel, limit, offset, alreadyPaged: true });
       }
     }
   } catch (error) {
@@ -55,11 +60,11 @@ export async function getPlaces(filters = {}) {
     const resp = await fetch(`${API_URL}/places.json`, { signal: AbortSignal.timeout(3000) });
     if (resp.ok) {
       const data = await resp.json();
-      return filterPlaces(data, { search, city, category, minRating, maxPriceLevel });
+      return filterPlaces(data, { search, city, category, minRating, maxPriceLevel, limit, offset });
     }
   } catch {}
 
-  return filterPlaces(dfwPlaces, { search, city, category, minRating, maxPriceLevel });
+  return filterPlaces(dfwPlaces, { search, city, category, minRating, maxPriceLevel, limit, offset });
 }
 
 /**
@@ -96,6 +101,13 @@ function filterPlaces(places, filters) {
 
   // Sort by rating desc
   filtered.sort((a, b) => (b.rating || 0) - (a.rating || 0));
+
+  // Apply pagination only if data wasn't already paged server-side
+  if (!filters.alreadyPaged) {
+    const start = filters.offset || 0;
+    const end = (filters.limit || filtered.length) + start;
+    filtered = filtered.slice(start, end);
+  }
 
   return filtered;
 }
@@ -291,11 +303,25 @@ export function getLocalTrips() {
 export async function fetchPlaces(options = {}) {
   return getPlaces({
     search: options.q || '',
-    category: '',
-    city: '',
+    category: options.category || '',
+    city: options.city || '',
     minRating: 0,
     maxPriceLevel: 4
   });
+}
+
+// Cities helper for UI (unused by Browse.jsx dynamic fetch if backend is down)
+export async function getCities() {
+  try {
+    const isBackendUp = await checkBackendAvailability();
+    if (isBackendUp) {
+      const resp = await fetch(`${API_URL}/api/cities`, { signal: AbortSignal.timeout(4000) });
+      if (resp.ok) return await resp.json();
+    }
+  } catch {}
+  // Fallback to local list
+  const names = Array.from(new Set((dfwPlaces || []).map(p => p.city).filter(Boolean)));
+  return names.map(n => ({ id: null, name: n, slug: null }));
 }
 
 export async function fetchPlaceById(id) {

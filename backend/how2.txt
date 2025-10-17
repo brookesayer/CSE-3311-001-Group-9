@@ -24,3 +24,35 @@ python -m backend.seed_from_json --file simpleapp/src/data/places.json --replace
 cd simpleapp
 npm install
 npm run dev
+
+###############################################
+# Windows troubleshooting (venv/uvicorn path) #
+###############################################
+# If you see an error like:
+#  Fatal error in launcher: Unable to create process using:
+#   "C:\\Users\\stock\\...\\backend\\.venv\\Scripts\\python.exe" "...\\uvicorn.exe" ...
+# it means a virtualenv from another machine was copied and the
+# uvicorn launcher points to a non-existent Python path.
+
+# Fix by deleting and recreating the venv on YOUR machine:
+# From the repo root (PowerShell)
+Remove-Item -Recurse -Force backend\\.venv 2>$null
+python -m venv backend\\.venv
+./backend/.venv/Scripts/Activate.ps1
+python -m pip install --upgrade pip
+pip install -r backend/requirements.txt
+
+# Start the API (from repo root)
+uvicorn backend.app:app --reload --env-file backend/.env
+
+# Notes
+# - In PowerShell use:    ./backend/.venv/Scripts/Activate.ps1
+# - In cmd.exe use:       backend\\.venv\\Scripts\\activate.bat
+# - Do NOT copy or commit the backend/.venv folder. If it shows up after
+#   unzipping a project, delete it and recreate it as above.
+
+#################################
+# Schema v2 (ERD) Migration run #
+#################################
+# Bring DB to ERD-compatible structure (idempotent):
+python -m backend.migrate_v2

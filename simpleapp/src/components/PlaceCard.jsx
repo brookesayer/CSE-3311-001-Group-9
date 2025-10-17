@@ -23,7 +23,7 @@ const PlaceCard = ({ place, onAddToTrip, showAddButton = true }) => {
           />
         </Link>
         <div className="absolute top-3 left-3">
-          <span className="bg-white/90 backdrop-blur-sm px-2 py-1 rounded-full text-xs font-medium text-gray-700">
+          <span className="bg-white/90 backdrop-blur-sm px-2 py-1 rounded-full text-xs font-medium text-gray-700 capitalize">
             {place.category}
           </span>
         </div>

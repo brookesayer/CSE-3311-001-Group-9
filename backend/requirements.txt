@@ -4,3 +4,4 @@ python-dotenv==1.0.1
 requests==2.32.3
 python-slugify==8.0.4
 filelock==3.16.1
+sqlalchemy==2.0.20

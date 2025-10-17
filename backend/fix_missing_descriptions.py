@@ -1,7 +1,7 @@
 # backend/fix_missing_descriptions.py
 from sqlalchemy.orm import Session
 from sqlalchemy import or_, func
-from db import engine, Base
+from .db import engine, Base
 from models import Place
 
 def synthesize_description(p: Place) -> str:
