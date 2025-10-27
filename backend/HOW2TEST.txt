@@ -1,0 +1,32 @@
+Backend Test Instructions
+
+Requirements
+- Python 3.11+ installed and on PATH
+- Optional: virtualenv
+
+Install
+- From repo root:
+  - Create venv (optional):
+    - PowerShell: python -m venv .venv; .\.venv\Scripts\Activate.ps1
+  - Install backend deps: python -m pip install -r backend/requirements.txt
+  - Install pytest: python -m pip install pytest
+
+Running Tests
+- All backend tests: pytest -q
+- Only backend folder: pytest -q backend/tests
+- Single file: pytest -q backend/tests/test_app.py
+- Single test: pytest -q backend/tests/test_app.py::test_health_returns_ok
+
+Notes
+- You do NOT need to run the backend server to run tests. FastAPI TestClient runs the app in-process.
+- The app loads .env files by default. Our tests force file mode and use a temp JSON file, but if you want to be extra safe in your shell: set USE_DB=0
+  - PowerShell: $env:USE_DB="0"
+
+Coverage (optional)
+- Install: python -m pip install pytest-cov
+- Run: pytest --cov=backend --cov-report=term-missing
+
+Simulate Failures
+- DB outage fallback (list): pytest -q backend/tests/test_app.py::test_db_failure_falls_back_to_file_on_list
+- DB outage fallback (detail): pytest -q backend/tests/test_app.py::test_db_failure_falls_back_to_file_on_detail
+- Malformed JSON fallback: pytest -q backend/tests/test_app.py::test_malformed_json_returns_empty_list
