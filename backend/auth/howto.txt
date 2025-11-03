@@ -1,0 +1,3 @@
+in virtual environment while starting backend:
+pip install 'pydantic[email]'
+pip install passlib[bcrypt]
