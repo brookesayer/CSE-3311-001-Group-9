@@ -12,6 +12,9 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
+# Import authentication
+from backend.auth.auth_module import auth_router, init_auth_db
+
 APP_DIR = Path(__file__).resolve().parent
 load_dotenv(APP_DIR.parent / '.env', override=False)
 load_dotenv(APP_DIR / '.env', override=True)
@@ -57,6 +60,16 @@ app.add_middleware(
     allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
     allow_headers=["*"],
 )
+
+# Initialize authentication database on startup
+@app.on_event("startup")
+async def startup_event():
+    """Initialize database tables."""
+    init_auth_db()
+    print("✅ Authentication database initialized")
+
+# Include routers
+app.include_router(auth_router)
 
 # Serve /static (images live in /static/places/)
 app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
