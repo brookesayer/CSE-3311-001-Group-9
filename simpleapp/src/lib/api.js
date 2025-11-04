@@ -331,3 +331,140 @@ export async function fetchPlaceById(id) {
 export async function checkHealth() {
   return checkBackendAvailability();
 }
+
+// ========== NEW: Authentication helper ==========
+
+/**
+ * Get auth token from localStorage
+ */
+const getAuthToken = () => {
+  return localStorage.getItem('authToken');
+};
+
+/**
+ * Make authenticated API request
+ */
+const authenticatedFetch = async (url, options = {}) => {
+  const token = getAuthToken();
+  
+  const headers = {
+    'Content-Type': 'application/json',
+    ...options.headers,
+  };
+  
+  if (token) {
+    headers['Authorization'] = `Bearer ${token}`;
+  }
+  
+  const response = await fetch(url, {
+    ...options,
+    headers,
+  });
+  
+  if (response.status === 401) {
+    // Token expired or invalid
+    localStorage.removeItem('authToken');
+    window.location.href = '/login';
+    throw new Error('Unauthorized');
+  }
+  
+  return response;
+};
+
+// ========== NEW: Favorites API ==========
+
+/**
+ * Get user's favorite place IDs
+ */
+export const getFavorites = async () => {
+  try {
+    const response = await authenticatedFetch(`${API_URL}/api/favorites/`);
+    
+    if (!response.ok) {
+      throw new Error('Failed to fetch favorites');
+    }
+    
+    return response.json();
+  } catch (error) {
+    console.error('Error fetching favorites:', error);
+    // Return empty array on error so UI doesn't break
+    return [];
+  }
+};
+
+/**
+ * Add a place to favorites
+ */
+export const addFavorite = async (placeId) => {
+  const response = await authenticatedFetch(`${API_URL}/api/favorites/`, {
+    method: 'POST',
+    body: JSON.stringify({ place_id: placeId }),
+  });
+  
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({ detail: 'Failed to add favorite' }));
+    throw new Error(error.detail || 'Failed to add favorite');
+  }
+  
+  return response.json();
+};
+
+/**
+ * Remove a place from favorites
+ */
+export const removeFavorite = async (placeId) => {
+  const response = await authenticatedFetch(`${API_URL}/api/favorites/${placeId}`, {
+    method: 'DELETE',
+  });
+  
+  if (!response.ok && response.status !== 204) {
+    throw new Error('Failed to remove favorite');
+  }
+  
+  return true;
+};
+
+/**
+ * Get favorites count
+ */
+export const getFavoritesCount = async () => {
+  try {
+    const response = await authenticatedFetch(`${API_URL}/api/favorites/count`);
+    
+    if (!response.ok) {
+      throw new Error('Failed to fetch favorites count');
+    }
+    
+    return response.json();
+  } catch (error) {
+    console.error('Error fetching favorites count:', error);
+    // Return 0 on error
+    return { count: 0 };
+  }
+};
+
+// ========== NEW: Profile API ==========
+
+/**
+ * Update user profile
+ */
+export const updateProfile = async (profileData) => {
+  const response = await authenticatedFetch(`${API_URL}/api/auth/profile`, {
+    method: 'PUT',
+    body: JSON.stringify(profileData),
+  });
+  
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({ detail: 'Failed to update profile' }));
+    throw new Error(error.detail || 'Failed to update profile');
+  }
+  
+  return response.json();
+};
+
+/**
+ * Fetch a single place by ID (alias for compatibility)
+ */
+export const getPlace = async (placeId) => {
+  return getPlaceById(placeId);
+};
