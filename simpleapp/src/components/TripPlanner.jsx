@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { storage } from '../lib/storage';
-import { createShareLink } from '../lib/api';
+import { useAuth } from '../auth/AuthContext';
 import {
   PlusIcon,
   TrashIcon,
@@ -14,8 +14,10 @@ import {
 } from '@heroicons/react/24/outline';
 import PlaceCard from './PlaceCard';
 import Toast from './Toast';
+import TripShareModal from './TripShareModal';
 
 const TripPlanner = () => {
+  const { isAuthenticated } = useAuth();
   const [trips, setTrips] = useState([]);
   const [activeTrip, setActiveTripState] = useState(null);
   const [showCreateForm, setShowCreateForm] = useState(false);
@@ -23,43 +25,110 @@ const TripPlanner = () => {
   const [newTripName, setNewTripName] = useState('');
   const [newTripDescription, setNewTripDescription] = useState('');
   const [toast, setToast] = useState(null);
-  const [shareLoading, setShareLoading] = useState(null);
+  const [shareModalTrip, setShareModalTrip] = useState(null);
+  const [isShareModalOpen, setIsShareModalOpen] = useState(false);
 
   useEffect(() => {
-    loadTrips();
+    if (isAuthenticated) {
+      loadTripsFromBackend();
+    } else {
+      loadTrips();
+    }
     const active = storage.getActiveTrip();
     setActiveTripState(active);
-  }, []);
+  }, [isAuthenticated]);
 
   const loadTrips = () => {
     const savedTrips = storage.getTrips();
     setTrips(savedTrips);
   };
 
+  const loadTripsFromBackend = async () => {
+    try {
+      const token = localStorage.getItem('authToken');
+      if (!token) {
+        loadTrips();
+        return;
+      }
+
+      const response = await fetch('http://localhost:8000/api/trips/', {
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        setTrips(data);
+      } else {
+        loadTrips();
+      }
+    } catch (error) {
+      console.error('Error loading trips from backend:', error);
+      loadTrips();
+    }
+  };
+
   const showToast = (message, type = 'success') => {
     setToast({ message, type });
   };
 
-  const handleCreateTrip = (e) => {
+  const handleCreateTrip = async (e) => {
     e.preventDefault();
     if (!newTripName.trim()) return;
 
-    const newTrip = storage.createTrip({
-      name: newTripName,
-      description: newTripDescription
-    });
+    if (isAuthenticated) {
+      try {
+        const token = localStorage.getItem('authToken');
+        const response = await fetch('http://localhost:8000/api/trips/', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`
+          },
+          body: JSON.stringify({
+            name: newTripName,
+            description: newTripDescription,
+            visibility: 'private'
+          })
+        });
 
-    setTrips([...trips, newTrip]);
-    setNewTripName('');
-    setNewTripDescription('');
-    setShowCreateForm(false);
+        if (response.ok) {
+          const newTrip = await response.json();
+          setTrips([...trips, newTrip]);
+          setNewTripName('');
+          setNewTripDescription('');
+          setShowCreateForm(false);
 
-    // Set as active trip if it's the first one
-    if (trips.length === 0) {
-      handleSetActiveTrip(newTrip.id);
+          if (trips.length === 0) {
+            handleSetActiveTrip(newTrip.id);
+          }
+
+          showToast('Trip created successfully!');
+        } else {
+          showToast('Failed to create trip', 'error');
+        }
+      } catch (error) {
+        console.error('Error creating trip:', error);
+        showToast('Failed to create trip', 'error');
+      }
+    } else {
+      const newTrip = storage.createTrip({
+        name: newTripName,
+        description: newTripDescription
+      });
+
+      setTrips([...trips, newTrip]);
+      setNewTripName('');
+      setNewTripDescription('');
+      setShowCreateForm(false);
+
+      if (trips.length === 0) {
+        handleSetActiveTrip(newTrip.id);
+      }
+
+      showToast('Trip created successfully!');
     }
-
-    showToast('Trip created successfully!');
   };
 
   const handleSetActiveTrip = (tripId) => {
@@ -75,38 +144,102 @@ const TripPlanner = () => {
     setNewTripDescription(trip.description);
   };
 
-  const handleUpdateTrip = (e) => {
+  const handleUpdateTrip = async (e) => {
     e.preventDefault();
     if (!newTripName.trim()) return;
 
-    const updatedTrip = storage.updateTrip(editingTrip, {
-      name: newTripName,
-      description: newTripDescription
-    });
+    if (isAuthenticated) {
+      try {
+        const token = localStorage.getItem('authToken');
+        const response = await fetch(`http://localhost:8000/api/trips/${editingTrip}`, {
+          method: 'PUT',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`
+          },
+          body: JSON.stringify({
+            name: newTripName,
+            description: newTripDescription
+          })
+        });
 
-    if (updatedTrip) {
-      setTrips(trips.map(trip =>
-        trip.id === editingTrip ? updatedTrip : trip
-      ));
+        if (response.ok) {
+          const updatedTrip = await response.json();
+          setTrips(trips.map(trip =>
+            trip.id === editingTrip ? updatedTrip : trip
+          ));
 
-      // Update active trip if it was the one being edited
-      if (activeTrip && activeTrip.id === editingTrip) {
-        setActiveTripState(updatedTrip);
+          if (activeTrip && activeTrip.id === editingTrip) {
+            setActiveTripState(updatedTrip);
+          }
+
+          setEditingTrip(null);
+          setNewTripName('');
+          setNewTripDescription('');
+          showToast('Trip updated successfully!');
+        } else {
+          showToast('Failed to update trip', 'error');
+        }
+      } catch (error) {
+        console.error('Error updating trip:', error);
+        showToast('Failed to update trip', 'error');
       }
+    } else {
+      const updatedTrip = storage.updateTrip(editingTrip, {
+        name: newTripName,
+        description: newTripDescription
+      });
 
-      setEditingTrip(null);
-      setNewTripName('');
-      setNewTripDescription('');
-      showToast('Trip updated successfully!');
+      if (updatedTrip) {
+        setTrips(trips.map(trip =>
+          trip.id === editingTrip ? updatedTrip : trip
+        ));
+
+        if (activeTrip && activeTrip.id === editingTrip) {
+          setActiveTripState(updatedTrip);
+        }
+
+        setEditingTrip(null);
+        setNewTripName('');
+        setNewTripDescription('');
+        showToast('Trip updated successfully!');
+      }
     }
   };
 
-  const handleDeleteTrip = (tripId) => {
-    if (window.confirm('Are you sure you want to delete this trip?')) {
+  const handleDeleteTrip = async (tripId) => {
+    if (!window.confirm('Are you sure you want to delete this trip?')) return;
+
+    if (isAuthenticated) {
+      try {
+        const token = localStorage.getItem('authToken');
+        const response = await fetch(`http://localhost:8000/api/trips/${tripId}`, {
+          method: 'DELETE',
+          headers: {
+            'Authorization': `Bearer ${token}`
+          }
+        });
+
+        if (response.ok) {
+          setTrips(trips.filter(trip => trip.id !== tripId));
+
+          if (activeTrip && activeTrip.id === tripId) {
+            storage.setActiveTrip(null);
+            setActiveTripState(null);
+          }
+
+          showToast('Trip deleted successfully!');
+        } else {
+          showToast('Failed to delete trip', 'error');
+        }
+      } catch (error) {
+        console.error('Error deleting trip:', error);
+        showToast('Failed to delete trip', 'error');
+      }
+    } else {
       storage.deleteTrip(tripId);
       setTrips(trips.filter(trip => trip.id !== tripId));
 
-      // Clear active trip if deleted
       if (activeTrip && activeTrip.id === tripId) {
         storage.setActiveTrip(null);
         setActiveTripState(null);
@@ -116,30 +249,64 @@ const TripPlanner = () => {
     }
   };
 
-  const handleRemovePlace = (tripId, placeId) => {
-    if (storage.removePlaceFromTrip(tripId, placeId)) {
-      loadTrips();
-      // Update active trip state
-      if (activeTrip && activeTrip.id === tripId) {
-        setActiveTripState(storage.getActiveTrip());
+  const handleRemovePlace = async (tripId, placeId) => {
+    if (isAuthenticated) {
+      try {
+        const token = localStorage.getItem('authToken');
+        const response = await fetch(`http://localhost:8000/api/trips/${tripId}/places/${placeId}`, {
+          method: 'DELETE',
+          headers: {
+            'Authorization': `Bearer ${token}`
+          }
+        });
+
+        if (response.ok) {
+          loadTripsFromBackend();
+          if (activeTrip && activeTrip.id === tripId) {
+            const updatedTrip = trips.find(t => t.id === tripId);
+            if (updatedTrip) {
+              setActiveTripState({
+                ...updatedTrip,
+                places: updatedTrip.places.filter(p => p.id !== placeId)
+              });
+            }
+          }
+          showToast('Place removed from trip!');
+        } else {
+          showToast('Failed to remove place', 'error');
+        }
+      } catch (error) {
+        console.error('Error removing place:', error);
+        showToast('Failed to remove place', 'error');
       }
-      showToast('Place removed from trip!');
+    } else {
+      if (storage.removePlaceFromTrip(tripId, placeId)) {
+        loadTrips();
+        if (activeTrip && activeTrip.id === tripId) {
+          setActiveTripState(storage.getActiveTrip());
+        }
+        showToast('Place removed from trip!');
+      }
     }
   };
 
-  const handleShareTrip = async (trip) => {
-    setShareLoading(trip.id);
-    try {
-      const shareUrl = await createShareLink(trip.id, trip);
+  const handleOpenShareModal = (trip) => {
+    setShareModalTrip(trip);
+    setIsShareModalOpen(true);
+  };
 
-      // Copy to clipboard
-      await navigator.clipboard.writeText(shareUrl);
-      showToast('Share link copied to clipboard!', 'success');
-    } catch (error) {
-      console.error('Error sharing trip:', error);
-      showToast('Failed to create share link', 'error');
-    } finally {
-      setShareLoading(null);
+  const handleCloseShareModal = () => {
+    setIsShareModalOpen(false);
+    setShareModalTrip(null);
+  };
+
+  const handleShareUpdate = (updatedTrip) => {
+    setTrips(trips.map(trip =>
+      trip.id === updatedTrip.id ? updatedTrip : trip
+    ));
+    
+    if (activeTrip && activeTrip.id === updatedTrip.id) {
+      setActiveTripState(updatedTrip);
     }
   };
 
@@ -170,6 +337,20 @@ const TripPlanner = () => {
     setNewTripDescription('');
   };
 
+  const getVisibilityBadge = (visibility) => {
+    const badges = {
+      private: { text: 'Private', class: 'bg-gray-100 text-gray-800' },
+      unlisted: { text: 'Unlisted', class: 'bg-blue-100 text-blue-800' },
+      public: { text: 'Public', class: 'bg-green-100 text-green-800' }
+    };
+    const badge = badges[visibility] || badges.private;
+    return (
+      <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${badge.class}`}>
+        {badge.text}
+      </span>
+    );
+  };
+
   return (
     <div className="max-w-6xl mx-auto">
       {toast && (
@@ -179,6 +360,13 @@ const TripPlanner = () => {
           onClose={() => setToast(null)}
         />
       )}
+
+      <TripShareModal
+        trip={shareModalTrip}
+        isOpen={isShareModalOpen}
+        onClose={handleCloseShareModal}
+        onUpdate={handleShareUpdate}
+      />
 
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-8">
         <div>
@@ -200,25 +388,29 @@ const TripPlanner = () => {
             <span>New Trip</span>
           </button>
 
-          <button
-            onClick={handleExportTrips}
-            className="btn-secondary flex items-center space-x-2"
-            disabled={trips.length === 0}
-          >
-            <DocumentArrowDownIcon className="h-5 w-5" />
-            <span>Export</span>
-          </button>
+          {!isAuthenticated && (
+            <>
+              <button
+                onClick={handleExportTrips}
+                className="btn-secondary flex items-center space-x-2"
+                disabled={trips.length === 0}
+              >
+                <DocumentArrowDownIcon className="h-5 w-5" />
+                <span>Export</span>
+              </button>
 
-          <label className="btn-secondary flex items-center space-x-2 cursor-pointer">
-            <DocumentArrowUpIcon className="h-5 w-5" />
-            <span>Import</span>
-            <input
-              type="file"
-              accept=".json"
-              onChange={handleImportTrips}
-              className="hidden"
-            />
-          </label>
+              <label className="btn-secondary flex items-center space-x-2 cursor-pointer">
+                <DocumentArrowUpIcon className="h-5 w-5" />
+                <span>Import</span>
+                <input
+                  type="file"
+                  accept=".json"
+                  onChange={handleImportTrips}
+                  className="hidden"
+                />
+              </label>
+            </>
+          )}
         </div>
       </div>
 
@@ -294,7 +486,7 @@ const TripPlanner = () => {
             >
               <div className="flex justify-between items-start mb-4">
                 <div className="flex-1">
-                  <div className="flex items-center gap-3">
+                  <div className="flex items-center gap-3 mb-2">
                     <h2 className="text-2xl font-bold text-gray-900">{trip.name}</h2>
                     {activeTrip && activeTrip.id === trip.id && (
                       <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-adventure-100 text-adventure-800">
@@ -302,6 +494,7 @@ const TripPlanner = () => {
                         Active
                       </span>
                     )}
+                    {isAuthenticated && trip.visibility && getVisibilityBadge(trip.visibility)}
                   </div>
                   {trip.description && (
                     <p className="text-gray-600 mt-1">{trip.description}</p>
@@ -309,7 +502,7 @@ const TripPlanner = () => {
                   <div className="flex items-center text-sm text-gray-500 mt-2 flex-wrap gap-x-4 gap-y-1">
                     <span className="flex items-center">
                       <MapPinIcon className="h-4 w-4 mr-1" />
-                      {trip.places.length} destinations
+                      {trip.places?.length || 0} destinations
                     </span>
                     <span className="flex items-center">
                       <CalendarIcon className="h-4 w-4 mr-1" />
@@ -328,18 +521,15 @@ const TripPlanner = () => {
                       <CheckCircleIcon className="h-5 w-5" />
                     </button>
                   )}
-                  <button
-                    onClick={() => handleShareTrip(trip)}
-                    className="p-2 text-gray-600 hover:text-adventure-600 transition-colors"
-                    title="Share trip"
-                    disabled={shareLoading === trip.id}
-                  >
-                    {shareLoading === trip.id ? (
-                      <div className="animate-spin h-5 w-5 border-2 border-adventure-600 border-t-transparent rounded-full"></div>
-                    ) : (
+                  {isAuthenticated && (
+                    <button
+                      onClick={() => handleOpenShareModal(trip)}
+                      className="p-2 text-gray-600 hover:text-adventure-600 transition-colors"
+                      title="Share trip"
+                    >
                       <ShareIcon className="h-5 w-5" />
-                    )}
-                  </button>
+                    </button>
+                  )}
                   <button
                     onClick={() => handleEditTrip(trip)}
                     className="p-2 text-gray-600 hover:text-adventure-600 transition-colors"
@@ -357,7 +547,7 @@ const TripPlanner = () => {
                 </div>
               </div>
 
-              {trip.places.length === 0 ? (
+              {(!trip.places || trip.places.length === 0) ? (
                 <div className="text-center py-8 bg-gray-50 rounded-lg">
                   <p className="text-gray-600 mb-2">No destinations added yet</p>
                   <p className="text-sm text-gray-500">

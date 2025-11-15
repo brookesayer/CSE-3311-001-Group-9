@@ -10,6 +10,8 @@ python -m venv backend\.venv
 pip install -r backend\requirements.txt
 
 pip install openai
+pip install 'pydantic[email]'
+pip install bcrypt==4.1.2 passlib==1.7.4
 
 uvicorn backend.app:app --reload --env-file backend/.env
 

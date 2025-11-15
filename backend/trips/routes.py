@@ -1,14 +1,16 @@
-"""Trip management routes."""
+"""Trip management routes with sharing functionality."""
 import time
+import secrets
 from typing import List, Optional
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, Query
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
-from sqlalchemy import text
+from sqlalchemy import text, or_
 
 from backend.auth.auth_module import get_current_user
 from backend.auth.models import User
 from backend.db import SessionLocal
+from backend.trips.models import TripVisibility
 
 trips_router = APIRouter(prefix="/api/trips", tags=["trips"])
 
@@ -16,10 +18,12 @@ trips_router = APIRouter(prefix="/api/trips", tags=["trips"])
 class TripCreate(BaseModel):
     name: str
     description: Optional[str] = ''
+    visibility: Optional[str] = 'private'
 
 class TripUpdate(BaseModel):
     name: Optional[str] = None
     description: Optional[str] = None
+    visibility: Optional[str] = None
 
 class TripPlaceAdd(BaseModel):
     place_id: int
@@ -28,9 +32,12 @@ class TripResponse(BaseModel):
     id: str
     name: str
     description: str
-    createdAt: str
-    updatedAt: Optional[str] = None
+    visibility: str
+    shareToken: Optional[str]
+    createdAt: Optional[str] = ''
+    updatedAt: Optional[str] = ''
     places: List[dict]
+    owner: Optional[dict] = None  # Owner info for shared trips
 
 def get_db():
     db = SessionLocal()
@@ -38,6 +45,35 @@ def get_db():
         yield db
     finally:
         db.close()
+
+def generate_share_token():
+    """Generate a secure random share token."""
+    return secrets.token_urlsafe(16)
+
+def format_datetime(dt):
+    """Convert datetime to ISO string, handling both datetime objects and strings."""
+    if dt is None:
+        return ''
+    if hasattr(dt, 'isoformat'):
+        return dt.isoformat()
+    return str(dt) if dt else ''
+
+def check_trip_access(trip_row, current_user_id: Optional[int], require_owner: bool = False):
+    """Check if user has access to trip."""
+    # Owner always has access
+    if trip_row['user_id'] == current_user_id:
+        return True
+    
+    # If require_owner is True, only owner has access
+    if require_owner:
+        return False
+    
+    # Public and unlisted trips are accessible to everyone
+    visibility = trip_row.get('visibility', 'private')
+    if visibility in ['public', 'unlisted']:
+        return True
+    
+    return False
 
 @trips_router.get("/", response_model=List[TripResponse])
 async def get_user_trips(
@@ -48,7 +84,7 @@ async def get_user_trips(
     try:
         # Get trips for user
         trips_query = text("""
-            SELECT id, name, description, created_at, updated_at
+            SELECT id, name, description, visibility, share_token, created_at, updated_at
             FROM trips
             WHERE user_id = :user_id
             ORDER BY created_at DESC
@@ -88,14 +124,82 @@ async def get_user_trips(
                 'id': trip['id'],
                 'name': trip['name'],
                 'description': trip['description'] or '',
-                'createdAt': trip['created_at'].isoformat() if trip.get('created_at') else None,
-                'updatedAt': trip['updated_at'].isoformat() if trip.get('updated_at') else None,
+                'visibility': trip.get('visibility', 'private'),
+                'shareToken': trip.get('share_token'),
+                'createdAt': format_datetime(trip.get('created_at')),
+                'updatedAt': format_datetime(trip.get('updated_at')),
                 'places': places_data
             })
         
         return result
     except Exception as e:
         print(f"Error fetching trips: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@trips_router.get("/public", response_model=List[TripResponse])
+async def get_public_trips(
+    limit: int = Query(20, ge=1, le=100),
+    offset: int = Query(0, ge=0),
+    db: Session = Depends(get_db)
+):
+    """Get public trips that anyone can see."""
+    try:
+        trips_query = text("""
+            SELECT t.id, t.name, t.description, t.visibility, t.share_token, 
+                   t.created_at, t.updated_at, t.user_id,
+                   u.username, u.name as user_name
+            FROM trips t
+            JOIN users u ON u.id = t.user_id
+            WHERE t.visibility = 'public'
+            ORDER BY t.created_at DESC
+            LIMIT :limit OFFSET :offset
+        """)
+        trips = db.execute(trips_query, {"limit": limit, "offset": offset}).mappings().all()
+        
+        result = []
+        for trip in trips:
+            # Get places for this trip
+            places_query = text("""
+                SELECT tp.place_id, tp.position, p.*
+                FROM trip_places tp
+                JOIN places p ON p.id = tp.place_id
+                WHERE tp.trip_id = :trip_id
+                ORDER BY tp.position ASC
+            """)
+            places = db.execute(places_query, {"trip_id": trip['id']}).mappings().all()
+            
+            places_data = [{
+                'id': p['place_id'],
+                'name': p.get('name'),
+                'category': p.get('category'),
+                'description': p.get('description'),
+                'address': p.get('address'),
+                'city': p.get('city'),
+                'lat': p.get('lat'),
+                'lon': p.get('lon'),
+                'rating': p.get('rating'),
+                'priceLevel': p.get('price_level'),
+                'imageUrl': p.get('image_url'),
+            } for p in places]
+            
+            result.append({
+                'id': trip['id'],
+                'name': trip['name'],
+                'description': trip['description'] or '',
+                'visibility': trip.get('visibility', 'private'),
+                'shareToken': trip.get('share_token'),
+                'createdAt': trip['created_at'].isoformat() if trip.get('created_at') else '',
+                'updatedAt': trip['updated_at'].isoformat() if trip.get('updated_at') else '',
+                'places': places_data,
+                'owner': {
+                    'username': trip['username'],
+                    'name': trip['user_name']
+                }
+            })
+        
+        return result
+    except Exception as e:
+        print(f"Error fetching public trips: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 @trips_router.post("/", response_model=TripResponse)
@@ -106,25 +210,39 @@ async def create_trip(
 ):
     """Create a new trip for the current user."""
     try:
-        # Generate unique trip ID
+        # Generate unique trip ID - use proper format
         trip_id = f"trip-{current_user.id}-{int(time.time() * 1000)}"
+        
+        print(f"Creating trip for user {current_user.id} with ID: {trip_id}")
+        
+        # Validate visibility
+        visibility = trip_data.visibility or 'private'
+        if visibility not in ['private', 'unlisted', 'public']:
+            visibility = 'private'
+        
+        # Generate share token if not private
+        share_token = generate_share_token() if visibility != 'private' else None
         
         # Insert trip
         insert_query = text("""
-            INSERT INTO trips (id, user_id, name, description)
-            VALUES (:id, :user_id, :name, :description)
+            INSERT INTO trips (id, user_id, name, description, visibility, share_token)
+            VALUES (:id, :user_id, :name, :description, :visibility, :share_token)
         """)
         db.execute(insert_query, {
             "id": trip_id,
             "user_id": current_user.id,
             "name": trip_data.name,
-            "description": trip_data.description or ''
+            "description": trip_data.description or '',
+            "visibility": visibility,
+            "share_token": share_token
         })
         db.commit()
         
+        print(f"Successfully created trip {trip_id} for user {current_user.id}")
+        
         # Fetch created trip
         select_query = text("""
-            SELECT id, name, description, created_at, updated_at
+            SELECT id, name, description, visibility, share_token, created_at, updated_at
             FROM trips
             WHERE id = :trip_id
         """)
@@ -134,13 +252,82 @@ async def create_trip(
             'id': trip['id'],
             'name': trip['name'],
             'description': trip['description'] or '',
-            'createdAt': trip['created_at'].isoformat() if trip.get('created_at') else None,
-            'updatedAt': trip['updated_at'].isoformat() if trip.get('updated_at') else None,
+            'visibility': trip.get('visibility', 'private'),
+            'shareToken': trip.get('share_token'),
+            'createdAt': trip['created_at'].isoformat() if trip.get('created_at') else '',
+            'updatedAt': trip['updated_at'].isoformat() if trip.get('updated_at') else '',
             'places': []
         }
     except Exception as e:
         db.rollback()
         print(f"Error creating trip: {e}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=str(e))
+
+@trips_router.get("/shared/{share_token}", response_model=TripResponse)
+async def get_trip_by_share_token(
+    share_token: str,
+    db: Session = Depends(get_db)
+):
+    """Get a trip by its share token (for unlisted/public trips)."""
+    try:
+        trip_query = text("""
+            SELECT t.id, t.name, t.description, t.visibility, t.share_token, 
+                   t.created_at, t.updated_at, t.user_id,
+                   u.username, u.name as user_name
+            FROM trips t
+            JOIN users u ON u.id = t.user_id
+            WHERE t.share_token = :share_token
+            AND t.visibility IN ('public', 'unlisted')
+        """)
+        trip = db.execute(trip_query, {"share_token": share_token}).mappings().first()
+        
+        if not trip:
+            raise HTTPException(status_code=404, detail="Trip not found or not shared")
+        
+        # Get places
+        places_query = text("""
+            SELECT tp.place_id, tp.position, p.*
+            FROM trip_places tp
+            JOIN places p ON p.id = tp.place_id
+            WHERE tp.trip_id = :trip_id
+            ORDER BY tp.position ASC
+        """)
+        places = db.execute(places_query, {"trip_id": trip['id']}).mappings().all()
+        
+        places_data = [{
+            'id': p['place_id'],
+            'name': p.get('name'),
+            'category': p.get('category'),
+            'description': p.get('description'),
+            'address': p.get('address'),
+            'city': p.get('city'),
+            'lat': p.get('lat'),
+            'lon': p.get('lon'),
+            'rating': p.get('rating'),
+            'priceLevel': p.get('price_level'),
+            'imageUrl': p.get('image_url'),
+        } for p in places]
+        
+        return {
+            'id': trip['id'],
+            'name': trip['name'],
+            'description': trip['description'] or '',
+            'visibility': trip.get('visibility', 'private'),
+            'shareToken': trip.get('share_token'),
+            'createdAt': trip['created_at'].isoformat() if trip.get('created_at') else '',
+            'updatedAt': trip['updated_at'].isoformat() if trip.get('updated_at') else '',
+            'places': places_data,
+            'owner': {
+                'username': trip['username'],
+                'name': trip['user_name']
+            }
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"Error fetching shared trip: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 @trips_router.get("/{trip_id}", response_model=TripResponse)
@@ -151,9 +338,8 @@ async def get_trip(
 ):
     """Get a specific trip by ID."""
     try:
-        # Get trip and verify ownership
         trip_query = text("""
-            SELECT id, name, description, created_at, updated_at, user_id
+            SELECT id, name, description, visibility, share_token, created_at, updated_at, user_id
             FROM trips
             WHERE id = :trip_id
         """)
@@ -162,7 +348,8 @@ async def get_trip(
         if not trip:
             raise HTTPException(status_code=404, detail="Trip not found")
         
-        if trip['user_id'] != current_user.id:
+        # Check access
+        if not check_trip_access(trip, current_user.id, require_owner=False):
             raise HTTPException(status_code=403, detail="Access denied")
         
         # Get places
@@ -193,8 +380,10 @@ async def get_trip(
             'id': trip['id'],
             'name': trip['name'],
             'description': trip['description'] or '',
-            'createdAt': trip['created_at'].isoformat() if trip.get('created_at') else None,
-            'updatedAt': trip['updated_at'].isoformat() if trip.get('updated_at') else None,
+            'visibility': trip.get('visibility', 'private'),
+            'shareToken': trip.get('share_token'),
+            'createdAt': trip['created_at'].isoformat() if trip.get('created_at') else '',
+            'updatedAt': trip['updated_at'].isoformat() if trip.get('updated_at') else '',
             'places': places_data
         }
     except HTTPException:
@@ -212,17 +401,26 @@ async def update_trip(
 ):
     """Update a trip."""
     try:
-        # Verify ownership
-        check_query = text("SELECT user_id FROM trips WHERE id = :trip_id")
+        check_query = text("SELECT user_id, visibility, share_token FROM trips WHERE id = :trip_id")
         trip = db.execute(check_query, {"trip_id": trip_id}).mappings().first()
         
         if not trip:
+            print(f"Trip not found: {trip_id}")
             raise HTTPException(status_code=404, detail="Trip not found")
         
-        if trip['user_id'] != current_user.id:
+        print(f"Trip user_id: {trip['user_id']} (type: {type(trip['user_id'])})")
+        print(f"Current user_id: {current_user.id} (type: {type(current_user.id)})")
+        
+        # Ensure both are integers for comparison
+        trip_user_id = int(trip['user_id']) if trip['user_id'] is not None else None
+        current_user_id = int(current_user.id) if current_user.id is not None else None
+        
+        if trip_user_id != current_user_id:
+            print(f"Access denied: Trip belongs to user {trip_user_id}, but current user is {current_user_id}")
             raise HTTPException(status_code=403, detail="Access denied")
         
-        # Build update query
+        print(f"Access granted for user {current_user_id}")
+        
         updates = []
         params = {"trip_id": trip_id}
         
@@ -234,22 +432,82 @@ async def update_trip(
             updates.append("description = :description")
             params["description"] = trip_data.description
         
+        if trip_data.visibility is not None:
+            if trip_data.visibility not in ['private', 'unlisted', 'public']:
+                raise HTTPException(status_code=400, detail="Invalid visibility value")
+            
+            updates.append("visibility = :visibility")
+            params["visibility"] = trip_data.visibility
+            
+            # Generate or remove share token based on visibility
+            if trip_data.visibility == 'private':
+                updates.append("share_token = NULL")
+            elif not trip['share_token']:
+                share_token = generate_share_token()
+                updates.append("share_token = :share_token")
+                params["share_token"] = share_token
+        
         if updates:
+            # Always update the updated_at timestamp
+            updates.append("updated_at = CURRENT_TIMESTAMP")
             update_query = text(f"""
                 UPDATE trips
-                SET {', '.join(updates)}, updated_at = CURRENT_TIMESTAMP
+                SET {', '.join(updates)}
                 WHERE id = :trip_id
             """)
             db.execute(update_query, params)
             db.commit()
+            print(f"Successfully updated trip {trip_id}")
         
-        # Return updated trip
-        return await get_trip(trip_id, current_user, db)
+        # Fetch and return updated trip
+        select_query = text("""
+            SELECT id, name, description, visibility, share_token, created_at, updated_at
+            FROM trips
+            WHERE id = :trip_id
+        """)
+        updated_trip = db.execute(select_query, {"trip_id": trip_id}).mappings().first()
+        
+        # Get places
+        places_query = text("""
+            SELECT tp.place_id, tp.position, p.*
+            FROM trip_places tp
+            JOIN places p ON p.id = tp.place_id
+            WHERE tp.trip_id = :trip_id
+            ORDER BY tp.position ASC
+        """)
+        places = db.execute(places_query, {"trip_id": trip_id}).mappings().all()
+        
+        places_data = [{
+            'id': p['place_id'],
+            'name': p.get('name'),
+            'category': p.get('category'),
+            'description': p.get('description'),
+            'address': p.get('address'),
+            'city': p.get('city'),
+            'lat': p.get('lat'),
+            'lon': p.get('lon'),
+            'rating': p.get('rating'),
+            'priceLevel': p.get('price_level'),
+            'imageUrl': p.get('image_url'),
+        } for p in places]
+        
+        return {
+            'id': updated_trip['id'],
+            'name': updated_trip['name'],
+            'description': updated_trip['description'] or '',
+            'visibility': updated_trip.get('visibility', 'private'),
+            'shareToken': updated_trip.get('share_token'),
+            'createdAt': updated_trip['created_at'].isoformat() if updated_trip.get('created_at') and hasattr(updated_trip['created_at'], 'isoformat') else (str(updated_trip.get('created_at')) if updated_trip.get('created_at') else ''),
+            'updatedAt': updated_trip['updated_at'].isoformat() if updated_trip.get('updated_at') and hasattr(updated_trip['updated_at'], 'isoformat') else (str(updated_trip.get('updated_at')) if updated_trip.get('updated_at') else ''),
+            'places': places_data
+        }
     except HTTPException:
         raise
     except Exception as e:
         db.rollback()
         print(f"Error updating trip: {e}")
+        import traceback
+        traceback.print_exc()
         raise HTTPException(status_code=500, detail=str(e))
 
 @trips_router.delete("/{trip_id}")
@@ -260,7 +518,6 @@ async def delete_trip(
 ):
     """Delete a trip."""
     try:
-        # Verify ownership
         check_query = text("SELECT user_id FROM trips WHERE id = :trip_id")
         trip = db.execute(check_query, {"trip_id": trip_id}).mappings().first()
         
@@ -270,7 +527,6 @@ async def delete_trip(
         if trip['user_id'] != current_user.id:
             raise HTTPException(status_code=403, detail="Access denied")
         
-        # Delete trip (places will be cascade deleted)
         delete_query = text("DELETE FROM trips WHERE id = :trip_id")
         db.execute(delete_query, {"trip_id": trip_id})
         db.commit()
@@ -292,7 +548,6 @@ async def add_place_to_trip(
 ):
     """Add a place to a trip."""
     try:
-        # Verify ownership
         check_query = text("SELECT user_id FROM trips WHERE id = :trip_id")
         trip = db.execute(check_query, {"trip_id": trip_id}).mappings().first()
         
@@ -302,7 +557,6 @@ async def add_place_to_trip(
         if trip['user_id'] != current_user.id:
             raise HTTPException(status_code=403, detail="Access denied")
         
-        # Check if place already exists in trip
         exists_query = text("""
             SELECT 1 FROM trip_places 
             WHERE trip_id = :trip_id AND place_id = :place_id
@@ -315,7 +569,6 @@ async def add_place_to_trip(
         if exists:
             raise HTTPException(status_code=409, detail="Place already in trip")
         
-        # Get max position
         max_pos_query = text("""
             SELECT COALESCE(MAX(position), -1) as max_pos
             FROM trip_places
@@ -323,7 +576,6 @@ async def add_place_to_trip(
         """)
         max_pos = db.execute(max_pos_query, {"trip_id": trip_id}).scalar()
         
-        # Insert place
         insert_query = text("""
             INSERT INTO trip_places (trip_id, place_id, position)
             VALUES (:trip_id, :place_id, :position)
@@ -334,7 +586,6 @@ async def add_place_to_trip(
             "position": max_pos + 1
         })
         
-        # Update trip's updated_at
         update_query = text("""
             UPDATE trips SET updated_at = CURRENT_TIMESTAMP WHERE id = :trip_id
         """)
@@ -358,7 +609,6 @@ async def remove_place_from_trip(
 ):
     """Remove a place from a trip."""
     try:
-        # Verify ownership
         check_query = text("SELECT user_id FROM trips WHERE id = :trip_id")
         trip = db.execute(check_query, {"trip_id": trip_id}).mappings().first()
         
@@ -368,7 +618,6 @@ async def remove_place_from_trip(
         if trip['user_id'] != current_user.id:
             raise HTTPException(status_code=403, detail="Access denied")
         
-        # Delete place from trip
         delete_query = text("""
             DELETE FROM trip_places 
             WHERE trip_id = :trip_id AND place_id = :place_id
@@ -378,7 +627,6 @@ async def remove_place_from_trip(
         if result.rowcount == 0:
             raise HTTPException(status_code=404, detail="Place not found in trip")
         
-        # Update trip's updated_at
         update_query = text("""
             UPDATE trips SET updated_at = CURRENT_TIMESTAMP WHERE id = :trip_id
         """)

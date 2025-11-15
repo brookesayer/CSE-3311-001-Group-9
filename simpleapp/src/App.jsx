@@ -11,7 +11,7 @@ import PlaceDetails from './pages/PlaceDetails';
 import Trips from './pages/Trips';
 import Gallery from './pages/Gallery';
 import About from './pages/About';
-import Share from './pages/Share';
+import SharedTrip from './pages/SharedTrip';
 import Profile from './pages/Profile';
 
 function App() {
@@ -141,7 +141,7 @@ function App() {
                   }
                 />
                 <Route
-                  path="/share/:token"
+                  path="/shared/:shareToken"
                   element={
                     <motion.div
                       initial={{ opacity: 0, y: 20 }}
@@ -149,7 +149,7 @@ function App() {
                       exit={{ opacity: 0, y: -20 }}
                       transition={{ duration: 0.3 }}
                     >
-                      <Share />
+                      <SharedTrip />
                     </motion.div>
                   }
                 />
