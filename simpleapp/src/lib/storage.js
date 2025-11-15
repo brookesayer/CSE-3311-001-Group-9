@@ -1,10 +1,43 @@
-const STORAGE_KEY = 'travel_app_trips';
-const ACTIVE_TRIP_KEY = 'travel_app_active_trip';
+// Helper to get current user ID from auth token
+const getCurrentUserId = () => {
+  try {
+    const token = localStorage.getItem('authToken');
+    if (!token) return null;
+    
+    // Decode JWT token to get user ID
+    // JWT format: header.payload.signature
+    const payload = token.split('.')[1];
+    const decoded = JSON.parse(atob(payload));
+    return decoded.user_id || decoded.sub || decoded.id || null;
+  } catch (error) {
+    console.error('Error decoding token:', error);
+    return null;
+  }
+};
+
+// Generate user-specific storage keys
+const getUserStorageKey = () => {
+  const userId = getCurrentUserId();
+  if (!userId) {
+    // Fallback to a guest key if no user is logged in
+    return 'travel_app_trips_guest';
+  }
+  return `travel_app_trips_user_${userId}`;
+};
+
+const getUserActiveTripKey = () => {
+  const userId = getCurrentUserId();
+  if (!userId) {
+    return 'travel_app_active_trip_guest';
+  }
+  return `travel_app_active_trip_user_${userId}`;
+};
 
 export const storage = {
   getTrips: () => {
     try {
-      const trips = localStorage.getItem(STORAGE_KEY);
+      const storageKey = getUserStorageKey();
+      const trips = localStorage.getItem(storageKey);
       return trips ? JSON.parse(trips) : [];
     } catch (error) {
       console.error('Error loading trips from localStorage:', error);
@@ -14,7 +47,8 @@ export const storage = {
 
   getActiveTrip: () => {
     try {
-      const activeTripId = localStorage.getItem(ACTIVE_TRIP_KEY);
+      const activeTripKey = getUserActiveTripKey();
+      const activeTripId = localStorage.getItem(activeTripKey);
       if (!activeTripId) return null;
 
       const trips = storage.getTrips();
@@ -27,10 +61,11 @@ export const storage = {
 
   setActiveTrip: (tripId) => {
     try {
+      const activeTripKey = getUserActiveTripKey();
       if (tripId) {
-        localStorage.setItem(ACTIVE_TRIP_KEY, tripId);
+        localStorage.setItem(activeTripKey, tripId);
       } else {
-        localStorage.removeItem(ACTIVE_TRIP_KEY);
+        localStorage.removeItem(activeTripKey);
       }
       return true;
     } catch (error) {
@@ -41,7 +76,8 @@ export const storage = {
 
   saveTrips: (trips) => {
     try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(trips));
+      const storageKey = getUserStorageKey();
+      localStorage.setItem(storageKey, JSON.stringify(trips));
       return true;
     } catch (error) {
       console.error('Error saving trips to localStorage:', error);
@@ -51,13 +87,15 @@ export const storage = {
 
   createTrip: (tripData) => {
     const trips = storage.getTrips();
+    const userId = getCurrentUserId();
     const newTrip = {
-      id: `local-${Date.now()}`,
+      id: `${userId || 'guest'}-${Date.now()}`,
       name: tripData.name || 'Untitled Trip',
       description: tripData.description || '',
       places: [],
       createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString()
+      updatedAt: new Date().toISOString(),
+      userId: userId // Store the user ID with the trip
     };
     trips.push(newTrip);
     storage.saveTrips(trips);
@@ -154,7 +192,15 @@ export const storage = {
           const importedTrips = JSON.parse(e.target.result);
           if (Array.isArray(importedTrips)) {
             const existingTrips = storage.getTrips();
-            const mergedTrips = [...existingTrips, ...importedTrips];
+            const userId = getCurrentUserId();
+            
+            // Add userId to imported trips if they don't have one
+            const tripsWithUserId = importedTrips.map(trip => ({
+              ...trip,
+              userId: trip.userId || userId
+            }));
+            
+            const mergedTrips = [...existingTrips, ...tripsWithUserId];
             storage.saveTrips(mergedTrips);
             resolve(importedTrips.length);
           } else {
@@ -167,5 +213,13 @@ export const storage = {
       reader.onerror = () => reject(new Error('Error reading file'));
       reader.readAsText(file);
     });
+  },
+
+  // Helper function to clear all user data on logout
+  clearUserData: () => {
+    const activeTripKey = getUserActiveTripKey();
+    const storageKey = getUserStorageKey();
+    localStorage.removeItem(activeTripKey);
+    localStorage.removeItem(storageKey);
   }
 };

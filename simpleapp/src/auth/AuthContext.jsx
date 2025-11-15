@@ -1,4 +1,5 @@
 import { createContext, useState, useContext, useEffect } from 'react';
+import { storage } from '../lib/storage';
 
 const AuthContext = createContext(null);
 
@@ -76,6 +77,8 @@ export const AuthProvider = ({ children }) => {
 
   const logout = () => {
     localStorage.removeItem('authToken');
+    // Clear user-specific trip data
+    storage.clearUserData();
     setUser(null);
   };
 

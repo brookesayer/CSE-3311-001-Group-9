@@ -12,8 +12,9 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
-# Import authentication
 from backend.auth.auth_module import auth_router, init_auth_db
+from backend.trips.models import Trip
+from backend.trips import trips_router
 
 APP_DIR = Path(__file__).resolve().parent
 load_dotenv(APP_DIR.parent / '.env', override=False)
@@ -66,10 +67,11 @@ app.add_middleware(
 async def startup_event():
     """Initialize database tables."""
     init_auth_db()
-    print("✅ Authentication database initialized")
+    print("✅ Authentication and Trips database initialized")
 
 # Include routers
 app.include_router(auth_router)
+app.include_router(trips_router)
 
 # Serve /static (images live in /static/places/)
 app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")

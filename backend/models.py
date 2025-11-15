@@ -7,8 +7,10 @@ from sqlalchemy import (
     Text,
     DateTime,
     ForeignKey,
+    Boolean,
 )
 from sqlalchemy.orm import relationship
+from datetime import datetime
 from .db import Base
 
 
@@ -54,7 +56,7 @@ class Place(Base):
     city_id = Column(Integer, ForeignKey("cities.id"), nullable=True)
 
     # Extra fields used by the API/UI
-    price_level = Column(Integer, nullable=True)  # 1..4 typical; nullable if unknown
+    price_level = Column(Integer, nullable=True)
     image_url = Column(Text, nullable=True)
     maps_url = Column(Text, nullable=True)
 
@@ -65,26 +67,27 @@ class Place(Base):
 class Trip(Base):
     __tablename__ = "trips"
 
-    # Using text UUIDs for portability across SQLite/Postgres
-    id = Column(String, primary_key=True)
-    user_id = Column(String, nullable=True)
-    name = Column(String, nullable=False)
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    name = Column(String(255), nullable=False)
     description = Column(Text, nullable=True)
-    created_at = Column(DateTime, nullable=True)
-    updated_at = Column(DateTime, nullable=True)
+    places_data = Column(Text, nullable=True)  # JSON string storing place objects
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
+    # Relationship to User (you'll need to add this to your User model in auth/models.py)
     items = relationship("TripItem", back_populates="trip", cascade="all,delete-orphan")
 
 
 class TripItem(Base):
     __tablename__ = "trip_items"
 
-    id = Column(String, primary_key=True)  # UUID
-    trip_id = Column(String, ForeignKey("trips.id", ondelete="CASCADE"), nullable=False)
+    id = Column(Integer, primary_key=True, index=True)
+    trip_id = Column(Integer, ForeignKey("trips.id", ondelete="CASCADE"), nullable=False, index=True)
     place_id = Column(Integer, ForeignKey("places.id", ondelete="CASCADE"), nullable=False)
-    position = Column(Integer, nullable=True)
+    position = Column(Integer, default=0)
     notes = Column(Text, nullable=True)
-    added_at = Column(DateTime, nullable=True)
+    added_at = Column(DateTime, default=datetime.utcnow)
 
     trip = relationship("Trip", back_populates="items")
     place = relationship("Place")
