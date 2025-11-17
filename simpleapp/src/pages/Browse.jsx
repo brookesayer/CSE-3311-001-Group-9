@@ -3,11 +3,14 @@ import CategoryChips from '../components/CategoryChips';
 import PlaceCard from '../components/PlaceCard';
 import SkeletonPlaceCard from '../components/SkeletonPlaceCard';
 import Toast from '../components/Toast';
+import TripSelectorModal from '../components/TripSelectorModal';
 import { storage } from '../lib/storage';
 import { getPlaces } from '../lib/api';
+import { useAuth } from '../auth/AuthContext';
 import { MagnifyingGlassIcon, AdjustmentsHorizontalIcon } from '@heroicons/react/24/outline';
 
 const Browse = () => {
+  const { isAuthenticated } = useAuth();
   const [places, setPlaces] = useState([]);
   const [filteredPlaces, setFilteredPlaces] = useState([]);
   const [selectedCategory, setSelectedCategory] = useState('All');
@@ -20,38 +23,72 @@ const Browse = () => {
   const [toast, setToast] = useState(null);
   const [loading, setLoading] = useState(true);
   const [activeTrip, setActiveTrip] = useState(null);
+  const [trips, setTrips] = useState([]);
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(24);
   const [hasMore, setHasMore] = useState(true);
   const sentinelRef = useRef(null);
+  
+  // Trip selector modal state
+  const [showTripSelector, setShowTripSelector] = useState(false);
+  const [selectedPlace, setSelectedPlace] = useState(null);
 
-  // Categories aligned with backend data
   const categories = ['All', 'restaurants', 'cafes', 'bars', 'nightlife', 'parks', 'museums', 'landmarks', 'outdoors', 'family', 'shopping', 'arts'];
   const [cities, setCities] = useState(['All', 'Dallas', 'Fort Worth', 'Arlington']);
 
-  // Debounce search input
   useEffect(() => {
     const timer = setTimeout(() => {
       setDebouncedSearch(searchQuery);
     }, 300);
-
     return () => clearTimeout(timer);
   }, [searchQuery]);
 
-  // Load active trip
+  // Load trips and active trip
   useEffect(() => {
-    const trip = storage.getActiveTrip();
-    setActiveTrip(trip);
-  }, []);
+    loadTripsAndActiveTrip();
+  }, [isAuthenticated]);
 
-  // Load cities from the backend when available
+  const loadTripsAndActiveTrip = async () => {
+    if (isAuthenticated) {
+      try {
+        const token = localStorage.getItem('authToken');
+        if (!token) return;
+
+        const response = await fetch('http://localhost:8000/api/trips/', {
+          headers: { 'Authorization': `Bearer ${token}` }
+        });
+
+        if (response.ok) {
+          const data = await response.json();
+          setTrips(data);
+          
+          // Get active trip from storage and find it in backend data
+          const activeFromStorage = storage.getActiveTrip();
+          if (activeFromStorage) {
+            const matchingTrip = data.find(t => t.id === activeFromStorage.id);
+            setActiveTrip(matchingTrip || null);
+          }
+        }
+      } catch (error) {
+        console.error('Error loading trips:', error);
+        // Fallback to local storage
+        const localTrips = storage.getTrips();
+        setTrips(localTrips);
+        setActiveTrip(storage.getActiveTrip());
+      }
+    } else {
+      const localTrips = storage.getTrips();
+      setTrips(localTrips);
+      setActiveTrip(storage.getActiveTrip());
+    }
+  };
+
   useEffect(() => {
     async function loadCities() {
       try {
         const resp = await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:8000'}/api/cities`, { signal: AbortSignal.timeout(4000) });
         if (resp.ok) {
           const rows = await resp.json();
-          // rows: [{id, name, slug}] — map to names and de-dupe
           const names = Array.from(new Set((rows || []).map(r => r.name).filter(Boolean)));
           if (names.length) setCities(['All', ...names]);
         }
@@ -60,7 +97,6 @@ const Browse = () => {
     loadCities();
   }, []);
 
-  // Local post-filter to ensure consistency when appending pages
   const applyLocalFilters = useCallback((list) => {
     let out = [...list];
     const q = (debouncedSearch || '').toLowerCase();
@@ -84,12 +120,10 @@ const Browse = () => {
     if (maxPriceLevel < 4) {
       out = out.filter(p => (p.priceLevel || 1) <= maxPriceLevel);
     }
-    // keep highest-rated first for consistency
     out.sort((a,b) => (b.rating||0) - (a.rating||0));
     return out;
   }, [debouncedSearch, selectedCity, selectedCategory, minRating, maxPriceLevel]);
 
-  // Fetch places with filters
   const loadPlaces = useCallback(async () => {
     try {
       setLoading(true);
@@ -102,7 +136,7 @@ const Browse = () => {
         limit: pageSize,
         offset: (page - 1) * pageSize
       });
-      // Append when loading subsequent pages (use functional updates to avoid stale state)
+      
       if (page > 1) {
         setPlaces(prev => {
           const combined = [...prev, ...data];
@@ -126,7 +160,6 @@ const Browse = () => {
     loadPlaces();
   }, [loadPlaces]);
 
-  // Reset paging and clear accumulated data when filters change
   useEffect(() => {
     setPage(1);
     setHasMore(true);
@@ -134,7 +167,6 @@ const Browse = () => {
     setFilteredPlaces([]);
   }, [debouncedSearch, selectedCity, selectedCategory, minRating, maxPriceLevel]);
 
-  // Infinite scroll observer
   useEffect(() => {
     const el = sentinelRef.current;
     if (!el) return;
@@ -149,32 +181,95 @@ const Browse = () => {
   }, [hasMore, loading]);
 
   const handleAddToTrip = useCallback((place) => {
-    const currentActiveTrip = storage.getActiveTrip();
-
-    if (!currentActiveTrip) {
+    // If no trips exist, show message
+    if (trips.length === 0) {
       setToast({
-        message: 'Create or select a trip first (Trips → New Trip).',
+        message: 'Create a trip first (Trips → New Trip).',
         type: 'warning'
       });
       return;
     }
 
-    const success = storage.addPlaceToTrip(currentActiveTrip.id, place);
-
-    if (success) {
-      setToast({
-        message: `${place.name} added to ${currentActiveTrip.name}!`,
-        type: 'success'
-      });
-      // Update active trip state
-      setActiveTrip(storage.getActiveTrip());
-    } else {
-      setToast({
-        message: `${place.name} is already in your trip!`,
-        type: 'warning'
-      });
+    // If only one trip exists, add to it directly
+    if (trips.length === 1) {
+      addPlaceToSpecificTrip(trips[0].id, place);
+      return;
     }
-  }, []);
+
+    // If multiple trips exist, show selector modal
+    setSelectedPlace(place);
+    setShowTripSelector(true);
+  }, [trips]);
+
+  const addPlaceToSpecificTrip = async (tripId, place) => {
+    if (isAuthenticated) {
+      try {
+        const token = localStorage.getItem('authToken');
+        const response = await fetch(`http://localhost:8000/api/trips/${tripId}/places`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`
+          },
+          body: JSON.stringify({ place_id: place.id })
+        });
+
+        if (response.ok) {
+          const trip = trips.find(t => t.id === tripId);
+          setToast({
+            message: `${place.name} added to ${trip?.name || 'trip'}!`,
+            type: 'success'
+          });
+          // Reload trips to update state
+          loadTripsAndActiveTrip();
+        } else {
+          const errorData = await response.json().catch(() => ({}));
+          if (errorData.detail?.includes('already')) {
+            setToast({
+              message: `${place.name} is already in this trip!`,
+              type: 'warning'
+            });
+          } else {
+            setToast({
+              message: 'Failed to add place to trip',
+              type: 'error'
+            });
+          }
+        }
+      } catch (error) {
+        console.error('Error adding place to trip:', error);
+        setToast({
+          message: 'Failed to add place to trip',
+          type: 'error'
+        });
+      }
+    } else {
+      // Use local storage for non-authenticated users
+      const success = storage.addPlaceToTrip(tripId, place);
+      const trip = trips.find(t => t.id === tripId);
+
+      if (success) {
+        setToast({
+          message: `${place.name} added to ${trip?.name || 'trip'}!`,
+          type: 'success'
+        });
+        loadTripsAndActiveTrip();
+      } else {
+        setToast({
+          message: `${place.name} is already in this trip!`,
+          type: 'warning'
+        });
+      }
+    }
+  };
+
+  const handleTripSelected = (tripId) => {
+    if (selectedPlace) {
+      addPlaceToSpecificTrip(tripId, selectedPlace);
+    }
+    setShowTripSelector(false);
+    setSelectedPlace(null);
+  };
 
   const clearFilters = () => {
     setSelectedCategory('All');
@@ -196,7 +291,19 @@ const Browse = () => {
         />
       )}
 
-      {/* Header Section */}
+      {showTripSelector && (
+        <TripSelectorModal
+          trips={trips}
+          activeTrip={activeTrip}
+          onSelect={handleTripSelected}
+          onClose={() => {
+            setShowTripSelector(false);
+            setSelectedPlace(null);
+          }}
+          placeName={selectedPlace?.name}
+        />
+      )}
+
       <div className="bg-white shadow-sm sticky top-0 z-20">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8">
           <div className="text-center mb-6 sm:mb-8">
@@ -208,7 +315,6 @@ const Browse = () => {
             </p>
           </div>
 
-          {/* Search and Filter Controls */}
           <div className="flex flex-col lg:flex-row gap-4 items-stretch lg:items-center justify-between">
             <div className="relative flex-1 max-w-full lg:max-w-lg">
               <MagnifyingGlassIcon className="absolute left-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-gray-400 pointer-events-none" />
@@ -222,7 +328,6 @@ const Browse = () => {
               />
             </div>
 
-            {/* City Selector */}
             <div className="flex gap-2">
               {cities.map(city => (
                 <button
@@ -252,7 +357,6 @@ const Browse = () => {
             </button>
           </div>
 
-          {/* Advanced Filters */}
           {showFilters && (
             <div className="mt-6 p-4 sm:p-6 bg-gray-50 rounded-lg border border-gray-200">
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
@@ -305,28 +409,24 @@ const Browse = () => {
         </div>
       </div>
 
-      {/* Main Content */}
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8">
-        {/* Category Chips */}
         <CategoryChips
           categories={categories}
           selectedCategory={selectedCategory}
           onCategorySelect={setSelectedCategory}
         />
 
-        {/* Results Count */}
         <div className="flex justify-between items-center mb-6">
           <p className="text-gray-600 text-sm sm:text-base">
             Showing <span className="font-semibold">{filteredPlaces.length}</span> loaded results
           </p>
-          {activeTrip && (
+          {trips.length > 0 && (
             <p className="text-xs sm:text-sm text-adventure-600 font-medium">
-              Adding to: <span className="font-bold">{activeTrip.name}</span>
+              {trips.length} trip{trips.length !== 1 ? 's' : ''} available
             </p>
           )}
         </div>
 
-        {/* Places Grid */}
         {isInitialLoading ? (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 sm:gap-6">
             {Array.from({ length: pageSize }).map((_, i) => (
@@ -350,7 +450,6 @@ const Browse = () => {
                 onAddToTrip={handleAddToTrip}
               />
             ))}
-            {/* Skeletons during load-more to avoid visual gaps */}
             {loading && filteredPlaces.length > 0 && (
               Array.from({ length: Math.min(8, pageSize / 2) }).map((_, i) => (
                 <SkeletonPlaceCard key={`sk-${i}`} />
@@ -359,7 +458,6 @@ const Browse = () => {
           </div>
         )}
 
-        {/* Infinite scroll sentinel */}
         <div ref={sentinelRef} className="h-1" />
       </div>
     </div>

@@ -1,6 +1,9 @@
 cd C:\Users\stock\Downloads\CSE-3311-001-Group-9
 make sure this is your dir
 
+# update database 
+python migrate_trips.py
+
 # create venv inside backend
 python -m venv backend\.venv
 

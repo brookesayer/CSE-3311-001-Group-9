@@ -15,7 +15,7 @@ const HeroCarousel = () => {
 
   return (
     <div
-      className="relative w-full overflow-hidden"
+      className="relative w-full overflow-hidden hero-carousel"
       style={{ height: '70vh', minHeight: '500px' }}
       onMouseEnter={() => setIsPaused(true)}
       onMouseLeave={() => setIsPaused(false)}
@@ -104,72 +104,74 @@ const HeroCarousel = () => {
       {/* Custom Pagination */}
       <div className="swiper-pagination-custom absolute bottom-6 sm:bottom-8 left-0 right-0 flex justify-center gap-2 z-10"></div>
 
-      <style jsx>{`
-        @keyframes fade-in {
-          from {
-            opacity: 0;
-            transform: translateY(10px);
+      <style dangerouslySetInnerHTML={{
+        __html: `
+          @keyframes fade-in {
+            from {
+              opacity: 0;
+              transform: translateY(10px);
+            }
+            to {
+              opacity: 1;
+              transform: translateY(0);
+            }
           }
-          to {
+
+          @keyframes slide-up {
+            from {
+              opacity: 0;
+              transform: translateY(20px);
+            }
+            to {
+              opacity: 1;
+              transform: translateY(0);
+            }
+          }
+
+          @keyframes scale-in {
+            from {
+              opacity: 0;
+              transform: scale(0.9);
+            }
+            to {
+              opacity: 1;
+              transform: scale(1);
+            }
+          }
+
+          .animate-fade-in {
+            animation: fade-in 0.8s ease-out;
+          }
+
+          .animate-slide-up {
+            animation: slide-up 1s ease-out 0.2s both;
+          }
+
+          .animate-scale-in {
+            animation: scale-in 1s ease-out 0.4s both;
+          }
+
+          .swiper-pagination-custom .swiper-pagination-bullet {
+            width: 10px;
+            height: 10px;
+            background: rgba(255, 255, 255, 0.5);
             opacity: 1;
-            transform: translateY(0);
+            transition: all 0.3s ease;
+            border-radius: 50%;
+            cursor: pointer;
           }
-        }
 
-        @keyframes slide-up {
-          from {
-            opacity: 0;
-            transform: translateY(20px);
+          .swiper-pagination-custom .swiper-pagination-bullet-active {
+            background: white;
+            width: 24px;
+            border-radius: 5px;
           }
-          to {
-            opacity: 1;
-            transform: translateY(0);
+
+          .swiper-pagination-custom .swiper-pagination-bullet:hover {
+            background: rgba(255, 255, 255, 0.8);
           }
-        }
-
-        @keyframes scale-in {
-          from {
-            opacity: 0;
-            transform: scale(0.9);
-          }
-          to {
-            opacity: 1;
-            transform: scale(1);
-          }
-        }
-
-        .animate-fade-in {
-          animation: fade-in 0.8s ease-out;
-        }
-
-        .animate-slide-up {
-          animation: slide-up 1s ease-out 0.2s both;
-        }
-
-        .animate-scale-in {
-          animation: scale-in 1s ease-out 0.4s both;
-        }
-
-        .swiper-pagination-custom :global(.swiper-pagination-bullet) {
-          width: 10px;
-          height: 10px;
-          background: rgba(255, 255, 255, 0.5);
-          opacity: 1;
-          transition: all 0.3s ease;
-          border-radius: 50%;
-          cursor: pointer;
-        }
-
-        .swiper-pagination-custom :global(.swiper-pagination-bullet-active) {
-          background: white;
-          width: 24px;
-          border-radius: 5px;
-        }
-
-        .swiper-pagination-custom :global(.swiper-pagination-bullet:hover) {
-          background: rgba(255, 255, 255, 0.8);
-        }
-      `}</style>
+        `
+      }} />
     </div>
   );
 };

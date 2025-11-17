@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { storage } from '../lib/storage';
 import { fetchPlaceById } from '../lib/api';
+import { useAuth } from '../auth/AuthContext';
 import Toast from '../components/Toast';
 import {
   StarIcon,
@@ -15,6 +16,7 @@ import {
 const PlaceDetails = () => {
   const { id } = useParams();
   const navigate = useNavigate();
+  const { isAuthenticated } = useAuth();
   const [place, setPlace] = useState(null);
   const [trips, setTrips] = useState([]);
   const [selectedTripId, setSelectedTripId] = useState('');
@@ -22,6 +24,7 @@ const PlaceDetails = () => {
   const [isAdded, setIsAdded] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [adding, setAdding] = useState(false);
 
   useEffect(() => {
     const loadPlace = async () => {
@@ -39,13 +42,42 @@ const PlaceDetails = () => {
     };
 
     loadPlace();
+    loadTrips();
+  }, [id, isAuthenticated]);
 
-    const savedTrips = storage.getTrips();
-    setTrips(savedTrips);
-    if (savedTrips.length > 0) {
-      setSelectedTripId(savedTrips[0].id);
+  const loadTrips = async () => {
+    if (isAuthenticated) {
+      try {
+        const token = localStorage.getItem('authToken');
+        if (!token) return;
+
+        const response = await fetch('http://localhost:8000/api/trips/', {
+          headers: { 'Authorization': `Bearer ${token}` }
+        });
+
+        if (response.ok) {
+          const data = await response.json();
+          setTrips(data);
+          if (data.length > 0) {
+            setSelectedTripId(data[0].id);
+          }
+        }
+      } catch (error) {
+        console.error('Error loading trips:', error);
+        const savedTrips = storage.getTrips();
+        setTrips(savedTrips);
+        if (savedTrips.length > 0) {
+          setSelectedTripId(savedTrips[0].id);
+        }
+      }
+    } else {
+      const savedTrips = storage.getTrips();
+      setTrips(savedTrips);
+      if (savedTrips.length > 0) {
+        setSelectedTripId(savedTrips[0].id);
+      }
     }
-  }, [id]);
+  };
 
   useEffect(() => {
     if (place && selectedTripId) {
@@ -66,22 +98,59 @@ const PlaceDetails = () => {
     return '$'.repeat(level);
   };
 
-  const handleAddToTrip = () => {
+  const handleAddToTrip = async () => {
     if (!selectedTripId) {
       setToast({ message: 'Please select a trip first!', type: 'warning' });
       return;
     }
 
-    const success = storage.addPlaceToTrip(selectedTripId, place);
-    const trip = trips.find(t => t.id === selectedTripId);
+    setAdding(true);
 
-    if (success) {
-      setToast({ message: `${place.name} added to ${trip.name}!`, type: 'success' });
-      setIsAdded(true);
-      setTrips(storage.getTrips());
+    if (isAuthenticated) {
+      try {
+        const token = localStorage.getItem('authToken');
+        const response = await fetch(`http://localhost:8000/api/trips/${selectedTripId}/places`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`
+          },
+          body: JSON.stringify({ place_id: place.id })
+        });
+
+        if (response.ok) {
+          const trip = trips.find(t => t.id === selectedTripId);
+          setToast({ message: `${place.name} added to ${trip.name}!`, type: 'success' });
+          setIsAdded(true);
+          // Reload trips to update counts
+          loadTrips();
+        } else {
+          const errorData = await response.json().catch(() => ({}));
+          if (errorData.detail?.includes('already')) {
+            setToast({ message: `${place.name} is already in this trip!`, type: 'warning' });
+            setIsAdded(true);
+          } else {
+            setToast({ message: 'Failed to add place to trip', type: 'error' });
+          }
+        }
+      } catch (error) {
+        console.error('Error adding place to trip:', error);
+        setToast({ message: 'Failed to add place to trip', type: 'error' });
+      }
     } else {
-      setToast({ message: `${place.name} is already in ${trip.name}!`, type: 'warning' });
+      const success = storage.addPlaceToTrip(selectedTripId, place);
+      const trip = trips.find(t => t.id === selectedTripId);
+
+      if (success) {
+        setToast({ message: `${place.name} added to ${trip.name}!`, type: 'success' });
+        setIsAdded(true);
+        setTrips(storage.getTrips());
+      } else {
+        setToast({ message: `${place.name} is already in ${trip.name}!`, type: 'warning' });
+      }
     }
+
+    setAdding(false);
   };
 
   const handleCreateNewTrip = () => {
@@ -246,7 +315,7 @@ const PlaceDetails = () => {
                     >
                       {trips.map((trip) => (
                         <option key={trip.id} value={trip.id}>
-                          {trip.name} ({trip.places.length} places)
+                          {trip.name} ({trip.places?.length || 0} places)
                         </option>
                       ))}
                     </select>
@@ -254,14 +323,21 @@ const PlaceDetails = () => {
 
                   <button
                     onClick={handleAddToTrip}
-                    disabled={isAdded}
+                    disabled={isAdded || adding}
                     className={`w-full flex items-center justify-center space-x-2 py-3 px-4 rounded-lg font-medium transition-all duration-200 ${
                       isAdded
                         ? 'bg-green-100 text-green-800 cursor-not-allowed'
+                        : adding
+                        ? 'bg-gray-300 text-gray-600 cursor-not-allowed'
                         : 'bg-adventure-600 hover:bg-adventure-700 text-white'
                     }`}
                   >
-                    {isAdded ? (
+                    {adding ? (
+                      <>
+                        <div className="animate-spin rounded-full h-5 w-5 border-2 border-white border-t-transparent"></div>
+                        <span>Adding...</span>
+                      </>
+                    ) : isAdded ? (
                       <>
                         <CheckIcon className="h-5 w-5" />
                         <span>Added to Trip</span>

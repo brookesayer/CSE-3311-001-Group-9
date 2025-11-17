@@ -1,8 +1,8 @@
-"""Trip management routes with sharing functionality."""
+"""Trip management routes with sharing functionality - FIXED IMAGE URLS AND TYPE HANDLING."""
 import time
 import secrets
 from typing import List, Optional
-from fastapi import APIRouter, Depends, HTTPException, status, Query
+from fastapi import APIRouter, Depends, HTTPException, status, Query, Request
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 from sqlalchemy import text, or_
@@ -37,7 +37,7 @@ class TripResponse(BaseModel):
     createdAt: Optional[str] = ''
     updatedAt: Optional[str] = ''
     places: List[dict]
-    owner: Optional[dict] = None  # Owner info for shared trips
+    owner: Optional[dict] = None
 
 def get_db():
     db = SessionLocal()
@@ -58,31 +58,93 @@ def format_datetime(dt):
         return dt.isoformat()
     return str(dt) if dt else ''
 
+def resolve_image_url(raw_url, base_url: str) -> str | None:
+    """Resolve image URL to absolute URL - matches app.py logic."""
+    if not raw_url:
+        return None
+    
+    raw = str(raw_url)
+    
+    # Already absolute URL
+    if raw.startswith(("http://", "https://")):
+        return raw
+    
+    # Clean and resolve relative URL
+    cleaned = raw.lstrip("/")
+    if cleaned.startswith("static/"):
+        cleaned = cleaned[len("static/"):]
+    
+    return f"{base_url}/static/{cleaned}"
+
+def safe_int(value) -> int | None:
+    """Safely convert value to integer."""
+    if value is None:
+        return None
+    try:
+        return int(value)
+    except (ValueError, TypeError):
+        return None
+
+def safe_float(value) -> float | None:
+    """Safely convert value to float."""
+    if value is None:
+        return None
+    try:
+        return float(value)
+    except (ValueError, TypeError):
+        return None
+
+def format_place_data(place, base_url: str) -> dict:
+    """Format place data with proper image URL resolution and type handling."""
+    # Try multiple possible image field names
+    image_url = resolve_image_url(
+        place.get('image_url') or place.get('imageUrl') or place.get('photo_url'),
+        base_url
+    )
+    
+    # Safely handle price_level - convert to int
+    price_level = safe_int(place.get('price_level'))
+    price_display = None
+    if price_level and price_level > 0:
+        price_display = '$' * price_level
+    
+    return {
+        'id': place.get('place_id'),
+        'name': place.get('name'),
+        'category': place.get('category'),
+        'description': place.get('description'),
+        'address': place.get('address'),
+        'city': place.get('city'),
+        'lat': safe_float(place.get('lat')),
+        'lon': safe_float(place.get('lon')),
+        'rating': safe_float(place.get('rating')),
+        'priceLevel': price_level,
+        'priceDisplay': price_display,
+        'imageUrl': image_url,
+        'mapsUrl': place.get('maps_url') or place.get('directions_url'),
+    }
+
 def check_trip_access(trip_row, current_user_id: Optional[int], require_owner: bool = False):
     """Check if user has access to trip."""
-    # Owner always has access
     if trip_row['user_id'] == current_user_id:
         return True
-    
-    # If require_owner is True, only owner has access
     if require_owner:
         return False
-    
-    # Public and unlisted trips are accessible to everyone
     visibility = trip_row.get('visibility', 'private')
     if visibility in ['public', 'unlisted']:
         return True
-    
     return False
 
 @trips_router.get("/", response_model=List[TripResponse])
 async def get_user_trips(
+    request: Request,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
     """Get all trips for the current user."""
     try:
-        # Get trips for user
+        base_url = str(request.base_url).rstrip("/")
+        
         trips_query = text("""
             SELECT id, name, description, visibility, share_token, created_at, updated_at
             FROM trips
@@ -93,7 +155,6 @@ async def get_user_trips(
         
         result = []
         for trip in trips:
-            # Get places for this trip
             places_query = text("""
                 SELECT tp.place_id, tp.position, p.*
                 FROM trip_places tp
@@ -103,22 +164,7 @@ async def get_user_trips(
             """)
             places = db.execute(places_query, {"trip_id": trip['id']}).mappings().all()
             
-            # Format places data
-            places_data = []
-            for place in places:
-                places_data.append({
-                    'id': place['place_id'],
-                    'name': place.get('name'),
-                    'category': place.get('category'),
-                    'description': place.get('description'),
-                    'address': place.get('address'),
-                    'city': place.get('city'),
-                    'lat': place.get('lat'),
-                    'lon': place.get('lon'),
-                    'rating': place.get('rating'),
-                    'priceLevel': place.get('price_level'),
-                    'imageUrl': place.get('image_url'),
-                })
+            places_data = [format_place_data(dict(place), base_url) for place in places]
             
             result.append({
                 'id': trip['id'],
@@ -134,16 +180,21 @@ async def get_user_trips(
         return result
     except Exception as e:
         print(f"Error fetching trips: {e}")
+        import traceback
+        traceback.print_exc()
         raise HTTPException(status_code=500, detail=str(e))
 
 @trips_router.get("/public", response_model=List[TripResponse])
 async def get_public_trips(
+    request: Request,
     limit: int = Query(20, ge=1, le=100),
     offset: int = Query(0, ge=0),
     db: Session = Depends(get_db)
 ):
     """Get public trips that anyone can see."""
     try:
+        base_url = str(request.base_url).rstrip("/")
+        
         trips_query = text("""
             SELECT t.id, t.name, t.description, t.visibility, t.share_token, 
                    t.created_at, t.updated_at, t.user_id,
@@ -158,7 +209,6 @@ async def get_public_trips(
         
         result = []
         for trip in trips:
-            # Get places for this trip
             places_query = text("""
                 SELECT tp.place_id, tp.position, p.*
                 FROM trip_places tp
@@ -168,19 +218,7 @@ async def get_public_trips(
             """)
             places = db.execute(places_query, {"trip_id": trip['id']}).mappings().all()
             
-            places_data = [{
-                'id': p['place_id'],
-                'name': p.get('name'),
-                'category': p.get('category'),
-                'description': p.get('description'),
-                'address': p.get('address'),
-                'city': p.get('city'),
-                'lat': p.get('lat'),
-                'lon': p.get('lon'),
-                'rating': p.get('rating'),
-                'priceLevel': p.get('price_level'),
-                'imageUrl': p.get('image_url'),
-            } for p in places]
+            places_data = [format_place_data(dict(place), base_url) for place in places]
             
             result.append({
                 'id': trip['id'],
@@ -188,8 +226,8 @@ async def get_public_trips(
                 'description': trip['description'] or '',
                 'visibility': trip.get('visibility', 'private'),
                 'shareToken': trip.get('share_token'),
-                'createdAt': trip['created_at'].isoformat() if trip.get('created_at') else '',
-                'updatedAt': trip['updated_at'].isoformat() if trip.get('updated_at') else '',
+                'createdAt': format_datetime(trip.get('created_at')),
+                'updatedAt': format_datetime(trip.get('updated_at')),
                 'places': places_data,
                 'owner': {
                     'username': trip['username'],
@@ -200,6 +238,8 @@ async def get_public_trips(
         return result
     except Exception as e:
         print(f"Error fetching public trips: {e}")
+        import traceback
+        traceback.print_exc()
         raise HTTPException(status_code=500, detail=str(e))
 
 @trips_router.post("/", response_model=TripResponse)
@@ -210,20 +250,16 @@ async def create_trip(
 ):
     """Create a new trip for the current user."""
     try:
-        # Generate unique trip ID - use proper format
         trip_id = f"trip-{current_user.id}-{int(time.time() * 1000)}"
         
         print(f"Creating trip for user {current_user.id} with ID: {trip_id}")
         
-        # Validate visibility
         visibility = trip_data.visibility or 'private'
         if visibility not in ['private', 'unlisted', 'public']:
             visibility = 'private'
         
-        # Generate share token if not private
         share_token = generate_share_token() if visibility != 'private' else None
         
-        # Insert trip
         insert_query = text("""
             INSERT INTO trips (id, user_id, name, description, visibility, share_token)
             VALUES (:id, :user_id, :name, :description, :visibility, :share_token)
@@ -240,7 +276,6 @@ async def create_trip(
         
         print(f"Successfully created trip {trip_id} for user {current_user.id}")
         
-        # Fetch created trip
         select_query = text("""
             SELECT id, name, description, visibility, share_token, created_at, updated_at
             FROM trips
@@ -254,8 +289,8 @@ async def create_trip(
             'description': trip['description'] or '',
             'visibility': trip.get('visibility', 'private'),
             'shareToken': trip.get('share_token'),
-            'createdAt': trip['created_at'].isoformat() if trip.get('created_at') else '',
-            'updatedAt': trip['updated_at'].isoformat() if trip.get('updated_at') else '',
+            'createdAt': format_datetime(trip.get('created_at')),
+            'updatedAt': format_datetime(trip.get('updated_at')),
             'places': []
         }
     except Exception as e:
@@ -268,10 +303,13 @@ async def create_trip(
 @trips_router.get("/shared/{share_token}", response_model=TripResponse)
 async def get_trip_by_share_token(
     share_token: str,
+    request: Request,
     db: Session = Depends(get_db)
 ):
     """Get a trip by its share token (for unlisted/public trips)."""
     try:
+        base_url = str(request.base_url).rstrip("/")
+        
         trip_query = text("""
             SELECT t.id, t.name, t.description, t.visibility, t.share_token, 
                    t.created_at, t.updated_at, t.user_id,
@@ -286,7 +324,6 @@ async def get_trip_by_share_token(
         if not trip:
             raise HTTPException(status_code=404, detail="Trip not found or not shared")
         
-        # Get places
         places_query = text("""
             SELECT tp.place_id, tp.position, p.*
             FROM trip_places tp
@@ -296,19 +333,7 @@ async def get_trip_by_share_token(
         """)
         places = db.execute(places_query, {"trip_id": trip['id']}).mappings().all()
         
-        places_data = [{
-            'id': p['place_id'],
-            'name': p.get('name'),
-            'category': p.get('category'),
-            'description': p.get('description'),
-            'address': p.get('address'),
-            'city': p.get('city'),
-            'lat': p.get('lat'),
-            'lon': p.get('lon'),
-            'rating': p.get('rating'),
-            'priceLevel': p.get('price_level'),
-            'imageUrl': p.get('image_url'),
-        } for p in places]
+        places_data = [format_place_data(dict(place), base_url) for place in places]
         
         return {
             'id': trip['id'],
@@ -316,8 +341,8 @@ async def get_trip_by_share_token(
             'description': trip['description'] or '',
             'visibility': trip.get('visibility', 'private'),
             'shareToken': trip.get('share_token'),
-            'createdAt': trip['created_at'].isoformat() if trip.get('created_at') else '',
-            'updatedAt': trip['updated_at'].isoformat() if trip.get('updated_at') else '',
+            'createdAt': format_datetime(trip.get('created_at')),
+            'updatedAt': format_datetime(trip.get('updated_at')),
             'places': places_data,
             'owner': {
                 'username': trip['username'],
@@ -328,16 +353,21 @@ async def get_trip_by_share_token(
         raise
     except Exception as e:
         print(f"Error fetching shared trip: {e}")
+        import traceback
+        traceback.print_exc()
         raise HTTPException(status_code=500, detail=str(e))
 
 @trips_router.get("/{trip_id}", response_model=TripResponse)
 async def get_trip(
     trip_id: str,
+    request: Request,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
     """Get a specific trip by ID."""
     try:
+        base_url = str(request.base_url).rstrip("/")
+        
         trip_query = text("""
             SELECT id, name, description, visibility, share_token, created_at, updated_at, user_id
             FROM trips
@@ -348,11 +378,9 @@ async def get_trip(
         if not trip:
             raise HTTPException(status_code=404, detail="Trip not found")
         
-        # Check access
         if not check_trip_access(trip, current_user.id, require_owner=False):
             raise HTTPException(status_code=403, detail="Access denied")
         
-        # Get places
         places_query = text("""
             SELECT tp.place_id, tp.position, p.*
             FROM trip_places tp
@@ -362,19 +390,7 @@ async def get_trip(
         """)
         places = db.execute(places_query, {"trip_id": trip_id}).mappings().all()
         
-        places_data = [{
-            'id': p['place_id'],
-            'name': p.get('name'),
-            'category': p.get('category'),
-            'description': p.get('description'),
-            'address': p.get('address'),
-            'city': p.get('city'),
-            'lat': p.get('lat'),
-            'lon': p.get('lon'),
-            'rating': p.get('rating'),
-            'priceLevel': p.get('price_level'),
-            'imageUrl': p.get('image_url'),
-        } for p in places]
+        places_data = [format_place_data(dict(place), base_url) for place in places]
         
         return {
             'id': trip['id'],
@@ -382,44 +398,41 @@ async def get_trip(
             'description': trip['description'] or '',
             'visibility': trip.get('visibility', 'private'),
             'shareToken': trip.get('share_token'),
-            'createdAt': trip['created_at'].isoformat() if trip.get('created_at') else '',
-            'updatedAt': trip['updated_at'].isoformat() if trip.get('updated_at') else '',
+            'createdAt': format_datetime(trip.get('created_at')),
+            'updatedAt': format_datetime(trip.get('updated_at')),
             'places': places_data
         }
     except HTTPException:
         raise
     except Exception as e:
         print(f"Error fetching trip: {e}")
+        import traceback
+        traceback.print_exc()
         raise HTTPException(status_code=500, detail=str(e))
 
 @trips_router.put("/{trip_id}", response_model=TripResponse)
 async def update_trip(
     trip_id: str,
     trip_data: TripUpdate,
+    request: Request,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
     """Update a trip."""
     try:
+        base_url = str(request.base_url).rstrip("/")
+        
         check_query = text("SELECT user_id, visibility, share_token FROM trips WHERE id = :trip_id")
         trip = db.execute(check_query, {"trip_id": trip_id}).mappings().first()
         
         if not trip:
-            print(f"Trip not found: {trip_id}")
             raise HTTPException(status_code=404, detail="Trip not found")
         
-        print(f"Trip user_id: {trip['user_id']} (type: {type(trip['user_id'])})")
-        print(f"Current user_id: {current_user.id} (type: {type(current_user.id)})")
-        
-        # Ensure both are integers for comparison
         trip_user_id = int(trip['user_id']) if trip['user_id'] is not None else None
         current_user_id = int(current_user.id) if current_user.id is not None else None
         
         if trip_user_id != current_user_id:
-            print(f"Access denied: Trip belongs to user {trip_user_id}, but current user is {current_user_id}")
             raise HTTPException(status_code=403, detail="Access denied")
-        
-        print(f"Access granted for user {current_user_id}")
         
         updates = []
         params = {"trip_id": trip_id}
@@ -439,7 +452,6 @@ async def update_trip(
             updates.append("visibility = :visibility")
             params["visibility"] = trip_data.visibility
             
-            # Generate or remove share token based on visibility
             if trip_data.visibility == 'private':
                 updates.append("share_token = NULL")
             elif not trip['share_token']:
@@ -448,7 +460,6 @@ async def update_trip(
                 params["share_token"] = share_token
         
         if updates:
-            # Always update the updated_at timestamp
             updates.append("updated_at = CURRENT_TIMESTAMP")
             update_query = text(f"""
                 UPDATE trips
@@ -457,9 +468,7 @@ async def update_trip(
             """)
             db.execute(update_query, params)
             db.commit()
-            print(f"Successfully updated trip {trip_id}")
         
-        # Fetch and return updated trip
         select_query = text("""
             SELECT id, name, description, visibility, share_token, created_at, updated_at
             FROM trips
@@ -467,7 +476,6 @@ async def update_trip(
         """)
         updated_trip = db.execute(select_query, {"trip_id": trip_id}).mappings().first()
         
-        # Get places
         places_query = text("""
             SELECT tp.place_id, tp.position, p.*
             FROM trip_places tp
@@ -477,19 +485,7 @@ async def update_trip(
         """)
         places = db.execute(places_query, {"trip_id": trip_id}).mappings().all()
         
-        places_data = [{
-            'id': p['place_id'],
-            'name': p.get('name'),
-            'category': p.get('category'),
-            'description': p.get('description'),
-            'address': p.get('address'),
-            'city': p.get('city'),
-            'lat': p.get('lat'),
-            'lon': p.get('lon'),
-            'rating': p.get('rating'),
-            'priceLevel': p.get('price_level'),
-            'imageUrl': p.get('image_url'),
-        } for p in places]
+        places_data = [format_place_data(dict(place), base_url) for place in places]
         
         return {
             'id': updated_trip['id'],
@@ -497,8 +493,8 @@ async def update_trip(
             'description': updated_trip['description'] or '',
             'visibility': updated_trip.get('visibility', 'private'),
             'shareToken': updated_trip.get('share_token'),
-            'createdAt': updated_trip['created_at'].isoformat() if updated_trip.get('created_at') and hasattr(updated_trip['created_at'], 'isoformat') else (str(updated_trip.get('created_at')) if updated_trip.get('created_at') else ''),
-            'updatedAt': updated_trip['updated_at'].isoformat() if updated_trip.get('updated_at') and hasattr(updated_trip['updated_at'], 'isoformat') else (str(updated_trip.get('updated_at')) if updated_trip.get('updated_at') else ''),
+            'createdAt': format_datetime(updated_trip.get('created_at')),
+            'updatedAt': format_datetime(updated_trip.get('updated_at')),
             'places': places_data
         }
     except HTTPException:
@@ -524,7 +520,10 @@ async def delete_trip(
         if not trip:
             raise HTTPException(status_code=404, detail="Trip not found")
         
-        if trip['user_id'] != current_user.id:
+        trip_user_id = int(trip['user_id']) if trip['user_id'] is not None else None
+        current_user_id = int(current_user.id) if current_user.id is not None else None
+        
+        if trip_user_id != current_user_id:
             raise HTTPException(status_code=403, detail="Access denied")
         
         delete_query = text("DELETE FROM trips WHERE id = :trip_id")
@@ -554,8 +553,11 @@ async def add_place_to_trip(
         if not trip:
             raise HTTPException(status_code=404, detail="Trip not found")
         
-        if trip['user_id'] != current_user.id:
-            raise HTTPException(status_code=403, detail="Access denied")
+        trip_user_id = int(trip['user_id']) if trip['user_id'] is not None else None
+        current_user_id = int(current_user.id) if current_user.id is not None else None
+        
+        if trip_user_id != current_user_id:
+            raise HTTPException(status_code=403, detail="You don't have permission to add places to this trip")
         
         exists_query = text("""
             SELECT 1 FROM trip_places 
@@ -568,6 +570,12 @@ async def add_place_to_trip(
         
         if exists:
             raise HTTPException(status_code=409, detail="Place already in trip")
+        
+        place_check = text("SELECT id FROM places WHERE id = :place_id")
+        place_exists = db.execute(place_check, {"place_id": place_data.place_id}).first()
+        
+        if not place_exists:
+            raise HTTPException(status_code=404, detail="Place not found")
         
         max_pos_query = text("""
             SELECT COALESCE(MAX(position), -1) as max_pos
@@ -592,12 +600,18 @@ async def add_place_to_trip(
         db.execute(update_query, {"trip_id": trip_id})
         db.commit()
         
-        return {"message": "Place added to trip", "trip_id": trip_id, "place_id": place_data.place_id}
+        return {
+            "message": "Place added to trip successfully",
+            "trip_id": trip_id,
+            "place_id": place_data.place_id
+        }
     except HTTPException:
         raise
     except Exception as e:
         db.rollback()
         print(f"Error adding place to trip: {e}")
+        import traceback
+        traceback.print_exc()
         raise HTTPException(status_code=500, detail=str(e))
 
 @trips_router.delete("/{trip_id}/places/{place_id}")
@@ -615,8 +629,11 @@ async def remove_place_from_trip(
         if not trip:
             raise HTTPException(status_code=404, detail="Trip not found")
         
-        if trip['user_id'] != current_user.id:
-            raise HTTPException(status_code=403, detail="Access denied")
+        trip_user_id = int(trip['user_id']) if trip['user_id'] is not None else None
+        current_user_id = int(current_user.id) if current_user.id is not None else None
+        
+        if trip_user_id != current_user_id:
+            raise HTTPException(status_code=403, detail="You don't have permission to modify this trip")
         
         delete_query = text("""
             DELETE FROM trip_places 
@@ -633,10 +650,12 @@ async def remove_place_from_trip(
         db.execute(update_query, {"trip_id": trip_id})
         db.commit()
         
-        return {"message": "Place removed from trip"}
+        return {"message": "Place removed from trip successfully"}
     except HTTPException:
         raise
     except Exception as e:
         db.rollback()
         print(f"Error removing place from trip: {e}")
+        import traceback
+        traceback.print_exc()
         raise HTTPException(status_code=500, detail=str(e))
