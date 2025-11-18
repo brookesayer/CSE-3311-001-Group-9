@@ -8,6 +8,8 @@ import { getPlaces } from '../lib/api';
 import { useAuth } from '../auth/AuthContext';
 import { MagnifyingGlassIcon, AdjustmentsHorizontalIcon } from '@heroicons/react/24/outline';
 
+const API_URL = import.meta.env.VITE_API_URL || 'https://trip-backend-554701706701.us-central1.run.app';
+
 const Browse = () => {
   const { isAuthenticated } = useAuth();
   const [places, setPlaces] = useState([]);
@@ -89,7 +91,7 @@ const Browse = () => {
   useEffect(() => {
     async function loadCities() {
       try {
-        const resp = await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:8000'}/api/cities`, { signal: AbortSignal.timeout(4000) });
+          const resp = await fetch(`${API_URL}/api/cities`, { signal: AbortSignal.timeout(4000) });
         if (resp.ok) {
           const rows = await resp.json();
           // rows: [{id, name, slug}] — map to names and de-dupe

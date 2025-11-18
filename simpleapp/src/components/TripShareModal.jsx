@@ -9,6 +9,8 @@ import {
 } from '@heroicons/react/24/outline';
 import Toast from '../components/Toast';
 
+const API_URL = import.meta.env.VITE_API_URL || 'https://trip-backend-554701706701.us-central1.run.app';
+
 const TripShareModal = ({ trip, isOpen, onClose, onUpdate }) => {
   const [visibility, setVisibility] = useState(trip?.visibility || 'private');
   const [shareUrl, setShareUrl] = useState('');
@@ -47,7 +49,7 @@ const TripShareModal = ({ trip, isOpen, onClose, onUpdate }) => {
     
     try {
       const token = localStorage.getItem('authToken');
-      const response = await fetch(`http://localhost:8000/api/trips/${trip.id}`, {
+      const response = await fetch(`${API_URL}/api/trips/${trip.id}`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',

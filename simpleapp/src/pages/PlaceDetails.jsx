@@ -13,6 +13,8 @@ import {
   CheckIcon
 } from '@heroicons/react/24/solid';
 
+const API_URL = import.meta.env.VITE_API_URL || 'https://trip-backend-554701706701.us-central1.run.app';
+
 const PlaceDetails = () => {
   const { id } = useParams();
   const navigate = useNavigate();
@@ -55,7 +57,7 @@ const PlaceDetails = () => {
             return;
           }
 
-          const response = await fetch('http://localhost:8000/api/trips/', {
+          const response = await fetch(`${API_URL}/api/trips/`, {
             headers: { 'Authorization': `Bearer ${token}` }
           });
 
@@ -120,7 +122,7 @@ const PlaceDetails = () => {
           return;
         }
 
-        const response = await fetch(`http://localhost:8000/api/trips/${selectedTripId}/places`, {
+        const response = await fetch(`${API_URL}/api/trips/${selectedTripId}/places`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
@@ -134,7 +136,7 @@ const PlaceDetails = () => {
           setIsAdded(true);
 
           // Refresh trips to keep place counts in sync
-          const refreshed = await fetch('http://localhost:8000/api/trips/', {
+          const refreshed = await fetch(`${API_URL}/api/trips/`, {
             headers: { 'Authorization': `Bearer ${token}` }
           });
           if (refreshed.ok) {

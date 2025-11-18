@@ -3,7 +3,7 @@ import { StarIcon, MapPinIcon, CurrencyDollarIcon } from '@heroicons/react/24/so
 import { PlusIcon } from '@heroicons/react/24/outline';
 
 const PlaceCard = ({ place, onAddToTrip, showAddButton = true }) => {
-  const apiBase = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+  const apiBase = import.meta.env.VITE_API_URL || 'https://trip-backend-554701706701.us-central1.run.app';
   const getImageSrc = () => {
     const url =
       place.imageUrl ||

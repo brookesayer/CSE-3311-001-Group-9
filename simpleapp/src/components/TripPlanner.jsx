@@ -16,6 +16,8 @@ import PlaceCard from './PlaceCard';
 import Toast from './Toast';
 import TripShareModal from './TripShareModal';
 
+const API_URL = import.meta.env.VITE_API_URL || 'https://trip-backend-554701706701.us-central1.run.app';
+
 const TripPlanner = () => {
   const { isAuthenticated } = useAuth();
   const [trips, setTrips] = useState([]);
@@ -52,6 +54,7 @@ const TripPlanner = () => {
       }
 
       const response = await fetch('http://localhost:8000/api/trips/', {
+      const response = await fetch(`${API_URL}/api/trips/`, {
         headers: {
           'Authorization': `Bearer ${token}`
         }
@@ -80,7 +83,7 @@ const TripPlanner = () => {
     if (isAuthenticated) {
       try {
         const token = localStorage.getItem('authToken');
-        const response = await fetch('http://localhost:8000/api/trips/', {
+        const response = await fetch(`${API_URL}/api/trips/`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
@@ -151,7 +154,7 @@ const TripPlanner = () => {
     if (isAuthenticated) {
       try {
         const token = localStorage.getItem('authToken');
-        const response = await fetch(`http://localhost:8000/api/trips/${editingTrip}`, {
+        const response = await fetch(`${API_URL}/api/trips/${editingTrip}`, {
           method: 'PUT',
           headers: {
             'Content-Type': 'application/json',
@@ -226,7 +229,7 @@ const TripPlanner = () => {
     if (isAuthenticated) {
       try {
         const token = localStorage.getItem('authToken');
-        const response = await fetch(`http://localhost:8000/api/trips/${tripId}`, {
+        const response = await fetch(`${API_URL}/api/trips/${tripId}`, {
           method: 'DELETE',
           headers: {
             'Authorization': `Bearer ${token}`
@@ -264,7 +267,7 @@ const TripPlanner = () => {
     if (isAuthenticated) {
       try {
         const token = localStorage.getItem('authToken');
-        const response = await fetch(`http://localhost:8000/api/trips/${tripId}/places/${placeId}`, {
+        const response = await fetch(`${API_URL}/api/trips/${tripId}/places/${placeId}`, {
           method: 'DELETE',
           headers: {
             'Authorization': `Bearer ${token}`

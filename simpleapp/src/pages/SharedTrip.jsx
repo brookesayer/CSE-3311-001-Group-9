@@ -10,6 +10,8 @@ import {
   GlobeAltIcon
 } from '@heroicons/react/24/outline';
 
+const API_URL = import.meta.env.VITE_API_URL || 'https://trip-backend-554701706701.us-central1.run.app';
+
 const SharedTrip = () => {
   const { shareToken } = useParams();
   const [trip, setTrip] = useState(null);
@@ -23,7 +25,7 @@ const SharedTrip = () => {
         setLoading(true);
         setError(null);
 
-        const response = await fetch(`http://localhost:8000/api/trips/shared/${shareToken}`);
+        const response = await fetch(`${API_URL}/api/trips/shared/${shareToken}`);
 
         if (!response.ok) {
           if (response.status === 404) {

@@ -1,7 +1,7 @@
 // Centralized API layer with backend + localStorage fallback
 import dfwPlaces from '../data/dfwPlaces';
 
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+const API_URL = import.meta.env.VITE_API_URL || 'https://trip-backend-554701706701.us-central1.run.app';
 
 // Helper to check if backend is available
 let backendAvailable = null;
