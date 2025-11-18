@@ -55,6 +55,8 @@ app.add_middleware(
         "http://127.0.0.1:5173",
         "http://localhost:4173",
         "http://127.0.0.1:4173",
+        "https://9-r0svtyzb1-contactk2s-projects.vercel.app",
+        "https://trip-backend-554701706701.us-central1.run.app",
     ],
     allow_origin_regex=r"http://(localhost|127\.0\.0\.1):\d+",
     allow_credentials=True,
