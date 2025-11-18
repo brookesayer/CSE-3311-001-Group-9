@@ -124,7 +124,12 @@ export async function getPlaceById(id) {
         signal: AbortSignal.timeout(5000)
       });
       if (response.ok) {
-        return await response.json();
+        const data = await response.json();
+        // Normalize imageUrl for UI components
+        if (data && data.image_url && !data.imageUrl) {
+          data.imageUrl = data.image_url;
+        }
+        return data;
       }
     }
   } catch (error) {

@@ -54,9 +54,17 @@ def format_datetime(dt):
     """Convert datetime to ISO string, handling both datetime objects and strings."""
     if dt is None:
         return ''
+    if isinstance(dt, str):
+        return dt
     if hasattr(dt, 'isoformat'):
         return dt.isoformat()
     return str(dt) if dt else ''
+
+def format_image_url(place_row):
+    """Choose the best image field available (image_url or photo_url)."""
+    if not place_row:
+        return None
+    return place_row.get('image_url') or place_row.get('photo_url')
 
 def check_trip_access(trip_row, current_user_id: Optional[int], require_owner: bool = False):
     """Check if user has access to trip."""
@@ -74,6 +82,13 @@ def check_trip_access(trip_row, current_user_id: Optional[int], require_owner: b
         return True
     
     return False
+
+def _user_matches(trip_user_id, current_user_id):
+    """Normalize user id comparison (DB may return strings)."""
+    try:
+        return int(trip_user_id) == int(current_user_id)
+    except Exception:
+        return str(trip_user_id) == str(current_user_id)
 
 @trips_router.get("/", response_model=List[TripResponse])
 async def get_user_trips(
@@ -117,7 +132,7 @@ async def get_user_trips(
                     'lon': place.get('lon'),
                     'rating': place.get('rating'),
                     'priceLevel': place.get('price_level'),
-                    'imageUrl': place.get('image_url'),
+                    'imageUrl': format_image_url(place),
                 })
             
             result.append({
@@ -179,7 +194,7 @@ async def get_public_trips(
                 'lon': p.get('lon'),
                 'rating': p.get('rating'),
                 'priceLevel': p.get('price_level'),
-                'imageUrl': p.get('image_url'),
+                'imageUrl': format_image_url(p),
             } for p in places]
             
             result.append({
@@ -307,7 +322,7 @@ async def get_trip_by_share_token(
             'lon': p.get('lon'),
             'rating': p.get('rating'),
             'priceLevel': p.get('price_level'),
-            'imageUrl': p.get('image_url'),
+            'imageUrl': format_image_url(p),
         } for p in places]
         
         return {
@@ -316,8 +331,8 @@ async def get_trip_by_share_token(
             'description': trip['description'] or '',
             'visibility': trip.get('visibility', 'private'),
             'shareToken': trip.get('share_token'),
-            'createdAt': trip['created_at'].isoformat() if trip.get('created_at') else '',
-            'updatedAt': trip['updated_at'].isoformat() if trip.get('updated_at') else '',
+            'createdAt': format_datetime(trip.get('created_at')),
+            'updatedAt': format_datetime(trip.get('updated_at')),
             'places': places_data,
             'owner': {
                 'username': trip['username'],
@@ -373,7 +388,7 @@ async def get_trip(
             'lon': p.get('lon'),
             'rating': p.get('rating'),
             'priceLevel': p.get('price_level'),
-            'imageUrl': p.get('image_url'),
+            'imageUrl': format_image_url(p),
         } for p in places]
         
         return {
@@ -488,7 +503,7 @@ async def update_trip(
             'lon': p.get('lon'),
             'rating': p.get('rating'),
             'priceLevel': p.get('price_level'),
-            'imageUrl': p.get('image_url'),
+            'imageUrl': format_image_url(p),
         } for p in places]
         
         return {
@@ -524,7 +539,7 @@ async def delete_trip(
         if not trip:
             raise HTTPException(status_code=404, detail="Trip not found")
         
-        if trip['user_id'] != current_user.id:
+        if not _user_matches(trip['user_id'], current_user.id):
             raise HTTPException(status_code=403, detail="Access denied")
         
         delete_query = text("DELETE FROM trips WHERE id = :trip_id")
@@ -554,7 +569,7 @@ async def add_place_to_trip(
         if not trip:
             raise HTTPException(status_code=404, detail="Trip not found")
         
-        if trip['user_id'] != current_user.id:
+        if not _user_matches(trip['user_id'], current_user.id):
             raise HTTPException(status_code=403, detail="Access denied")
         
         exists_query = text("""
@@ -615,7 +630,7 @@ async def remove_place_from_trip(
         if not trip:
             raise HTTPException(status_code=404, detail="Trip not found")
         
-        if trip['user_id'] != current_user.id:
+        if not _user_matches(trip['user_id'], current_user.id):
             raise HTTPException(status_code=403, detail="Access denied")
         
         delete_query = text("""

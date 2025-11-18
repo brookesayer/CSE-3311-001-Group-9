@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { storage } from '../lib/storage';
+import { useAuth } from '../auth/AuthContext';
 import { fetchPlaceById } from '../lib/api';
 import Toast from '../components/Toast';
 import {
@@ -15,6 +16,7 @@ import {
 const PlaceDetails = () => {
   const { id } = useParams();
   const navigate = useNavigate();
+  const { isAuthenticated } = useAuth();
   const [place, setPlace] = useState(null);
   const [trips, setTrips] = useState([]);
   const [selectedTripId, setSelectedTripId] = useState('');
@@ -39,13 +41,51 @@ const PlaceDetails = () => {
     };
 
     loadPlace();
-
-    const savedTrips = storage.getTrips();
-    setTrips(savedTrips);
-    if (savedTrips.length > 0) {
-      setSelectedTripId(savedTrips[0].id);
-    }
   }, [id]);
+
+  useEffect(() => {
+    const loadTrips = async () => {
+      if (isAuthenticated) {
+        try {
+          const token = localStorage.getItem('authToken');
+          if (!token) {
+            const savedTrips = storage.getTrips();
+            setTrips(savedTrips);
+            setSelectedTripId(savedTrips[0]?.id || '');
+            return;
+          }
+
+          const response = await fetch('http://localhost:8000/api/trips/', {
+            headers: { 'Authorization': `Bearer ${token}` }
+          });
+
+          if (response.ok) {
+            const data = await response.json();
+            setTrips(data);
+            setSelectedTripId(prev => {
+              if (prev && data.some(t => t.id === prev)) return prev;
+              return data[0]?.id || '';
+            });
+          } else {
+            const savedTrips = storage.getTrips();
+            setTrips(savedTrips);
+            setSelectedTripId(savedTrips[0]?.id || '');
+          }
+        } catch (error) {
+          console.error('Error loading trips from backend:', error);
+          const savedTrips = storage.getTrips();
+          setTrips(savedTrips);
+          setSelectedTripId(savedTrips[0]?.id || '');
+        }
+      } else {
+        const savedTrips = storage.getTrips();
+        setTrips(savedTrips);
+        setSelectedTripId(savedTrips[0]?.id || '');
+      }
+    };
+
+    loadTrips();
+  }, [isAuthenticated]);
 
   useEffect(() => {
     if (place && selectedTripId) {
@@ -66,21 +106,65 @@ const PlaceDetails = () => {
     return '$'.repeat(level);
   };
 
-  const handleAddToTrip = () => {
+  const handleAddToTrip = async () => {
     if (!selectedTripId) {
       setToast({ message: 'Please select a trip first!', type: 'warning' });
       return;
     }
 
-    const success = storage.addPlaceToTrip(selectedTripId, place);
-    const trip = trips.find(t => t.id === selectedTripId);
+    if (isAuthenticated) {
+      try {
+        const token = localStorage.getItem('authToken');
+        if (!token) {
+          setToast({ message: 'You need to be logged in.', type: 'error' });
+          return;
+        }
 
-    if (success) {
-      setToast({ message: `${place.name} added to ${trip.name}!`, type: 'success' });
-      setIsAdded(true);
-      setTrips(storage.getTrips());
+        const response = await fetch(`http://localhost:8000/api/trips/${selectedTripId}/places`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`
+          },
+          body: JSON.stringify({ place_id: place.id })
+        });
+
+        if (response.ok) {
+          setToast({ message: `${place.name} added to trip!`, type: 'success' });
+          setIsAdded(true);
+
+          // Refresh trips to keep place counts in sync
+          const refreshed = await fetch('http://localhost:8000/api/trips/', {
+            headers: { 'Authorization': `Bearer ${token}` }
+          });
+          if (refreshed.ok) {
+            const data = await refreshed.json();
+            setTrips(data);
+          }
+        } else if (response.status === 409) {
+          setToast({ message: `${place.name} is already in that trip.`, type: 'warning' });
+          setIsAdded(true);
+        } else if (response.status === 403 || response.status === 404) {
+          setToast({ message: 'Trip not accessible for this account.', type: 'error' });
+        } else {
+          setToast({ message: 'Failed to add place to trip.', type: 'error' });
+        }
+      } catch (err) {
+        console.error('Error adding place to trip:', err);
+        setToast({ message: 'Failed to add place to trip.', type: 'error' });
+      }
     } else {
-      setToast({ message: `${place.name} is already in ${trip.name}!`, type: 'warning' });
+      const success = storage.addPlaceToTrip(selectedTripId, place);
+      const trip = trips.find(t => t.id === selectedTripId);
+
+      if (success) {
+        setToast({ message: `${place.name} added to ${trip.name}!`, type: 'success' });
+        setIsAdded(true);
+        const updatedTrips = storage.getTrips();
+        setTrips(updatedTrips);
+      } else {
+        setToast({ message: `${place.name} is already in ${trip.name}!`, type: 'warning' });
+      }
     }
   };
 

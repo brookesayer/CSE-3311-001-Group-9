@@ -9,10 +9,10 @@ import PlaceDetails from './pages/PlaceDetails';
 import Trips from './pages/Trips';
 import Gallery from './pages/Gallery';
 import About from './pages/About';
-import Share from './pages/Share';
 import Profile from './pages/Profile';
 import Login from './auth/Login';
 import Register from './auth/Register';
+import SharedTrip from './pages/SharedTrip';
 
 function AppWithAuth() {
   return (
@@ -29,7 +29,10 @@ function AppWithAuth() {
                 <Route path="/trips" element={<motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -20 }} transition={{ duration: 0.3 }}><Trips /></motion.div>} />
                 <Route path="/gallery" element={<motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -20 }} transition={{ duration: 0.3 }}><Gallery /></motion.div>} />
                 <Route path="/about" element={<motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -20 }} transition={{ duration: 0.3 }}><About /></motion.div>} />
-                <Route path="/share/:token" element={<motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -20 }} transition={{ duration: 0.3 }}><Share /></motion.div>} />
+                {/* New sharing route using backend shareToken */}
+                <Route path="/shared/:shareToken" element={<motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -20 }} transition={{ duration: 0.3 }}><SharedTrip /></motion.div>} />
+                {/* Legacy encoded-share route kept for backward compatibility */}
+                <Route path="/share/:token" element={<motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -20 }} transition={{ duration: 0.3 }}><SharedTrip /></motion.div>} />
                 <Route path="/profile" element={<motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -20 }} transition={{ duration: 0.3 }}><Profile /></motion.div>} />
                 <Route path="/login" element={<motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -20 }} transition={{ duration: 0.3 }}><Login /></motion.div>} />
                 <Route path="/register" element={<motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -20 }} transition={{ duration: 0.3 }}><Register /></motion.div>} />

@@ -207,6 +207,19 @@ const TripPlanner = () => {
     }
   };
 
+  const removeTripLocally = (tripId, message = 'Trip deleted successfully!') => {
+    storage.deleteTrip(tripId);
+    const filtered = trips.filter(trip => trip.id !== tripId);
+    setTrips(filtered);
+
+    if (activeTrip && activeTrip.id === tripId) {
+      storage.setActiveTrip(null);
+      setActiveTripState(null);
+    }
+
+    showToast(message);
+  };
+
   const handleDeleteTrip = async (tripId) => {
     if (!window.confirm('Are you sure you want to delete this trip?')) return;
 
@@ -229,6 +242,12 @@ const TripPlanner = () => {
           }
 
           showToast('Trip deleted successfully!');
+        } else if (response.status === 403 || response.status === 404) {
+          // If the backend rejects (likely ownership mismatch), clean up local copy
+          removeTripLocally(
+            tripId,
+            'Trip was not owned by this account; removed local copy instead.'
+          );
         } else {
           showToast('Failed to delete trip', 'error');
         }
@@ -237,15 +256,7 @@ const TripPlanner = () => {
         showToast('Failed to delete trip', 'error');
       }
     } else {
-      storage.deleteTrip(tripId);
-      setTrips(trips.filter(trip => trip.id !== tripId));
-
-      if (activeTrip && activeTrip.id === tripId) {
-        storage.setActiveTrip(null);
-        setActiveTripState(null);
-      }
-
-      showToast('Trip deleted successfully!');
+      removeTripLocally(tripId);
     }
   };
 

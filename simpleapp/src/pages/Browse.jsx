@@ -5,9 +5,11 @@ import SkeletonPlaceCard from '../components/SkeletonPlaceCard';
 import Toast from '../components/Toast';
 import { storage } from '../lib/storage';
 import { getPlaces } from '../lib/api';
+import { useAuth } from '../auth/AuthContext';
 import { MagnifyingGlassIcon, AdjustmentsHorizontalIcon } from '@heroicons/react/24/outline';
 
 const Browse = () => {
+  const { isAuthenticated } = useAuth();
   const [places, setPlaces] = useState([]);
   const [filteredPlaces, setFilteredPlaces] = useState([]);
   const [selectedCategory, setSelectedCategory] = useState('All');
@@ -19,6 +21,7 @@ const Browse = () => {
   const [showFilters, setShowFilters] = useState(false);
   const [toast, setToast] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [trips, setTrips] = useState([]);
   const [activeTrip, setActiveTrip] = useState(null);
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(24);
@@ -38,11 +41,49 @@ const Browse = () => {
     return () => clearTimeout(timer);
   }, [searchQuery]);
 
-  // Load active trip
+  const syncTripsAndActive = useCallback(async () => {
+    const apiBase = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+
+    if (isAuthenticated) {
+      try {
+        const token = localStorage.getItem('authToken');
+        if (token) {
+          const resp = await fetch(`${apiBase}/api/trips/`, {
+            headers: { Authorization: `Bearer ${token}` }
+          });
+          if (resp.ok) {
+            const data = await resp.json();
+            setTrips(data);
+            // Cache backend trips locally so the active trip lookup works across pages
+            storage.saveTrips(data);
+            let current = storage.getActiveTrip();
+            if (!current && data.length > 0) {
+              storage.setActiveTrip(data[0].id);
+              current = data[0];
+            }
+            setActiveTrip(current || null);
+            return;
+          }
+        }
+      } catch (err) {
+        console.error('Error loading trips for browse:', err);
+      }
+    }
+
+    const localTrips = storage.getTrips();
+    setTrips(localTrips);
+    let current = storage.getActiveTrip();
+    if (!current && localTrips.length > 0) {
+      storage.setActiveTrip(localTrips[0].id);
+      current = localTrips[0];
+    }
+    setActiveTrip(current || null);
+  }, [isAuthenticated]);
+
+  // Load trips/active trip when auth changes or on mount
   useEffect(() => {
-    const trip = storage.getActiveTrip();
-    setActiveTrip(trip);
-  }, []);
+    syncTripsAndActive();
+  }, [syncTripsAndActive]);
 
   // Load cities from the backend when available
   useEffect(() => {
@@ -148,35 +189,73 @@ const Browse = () => {
     return () => observer.disconnect();
   }, [hasMore, loading]);
 
-  const handleAddToTrip = useCallback((place) => {
-    const currentActiveTrip = storage.getActiveTrip();
+  const handleAddToTrip = useCallback(async (place) => {
+    const apiBase = import.meta.env.VITE_API_URL || "http://localhost:8000";
+    const currentActiveTrip = activeTrip || storage.getActiveTrip();
 
     if (!currentActiveTrip) {
       setToast({
-        message: 'Create or select a trip first (Trips → New Trip).',
-        type: 'warning'
+        message: 'Create or select a trip first (Trips \u2192 set Active, then retry).',
+        type: "warning"
       });
       return;
     }
 
-    const success = storage.addPlaceToTrip(currentActiveTrip.id, place);
+    if (isAuthenticated) {
+      try {
+        const token = localStorage.getItem("authToken");
+        if (!token) {
+          setToast({ message: "You need to be logged in.", type: "error" });
+          return;
+        }
 
-    if (success) {
-      setToast({
-        message: `${place.name} added to ${currentActiveTrip.name}!`,
-        type: 'success'
-      });
-      // Update active trip state
-      setActiveTrip(storage.getActiveTrip());
+        const resp = await fetch(`${apiBase}/api/trips/${currentActiveTrip.id}/places`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`
+          },
+          body: JSON.stringify({ place_id: place.id })
+        });
+
+        if (resp.ok) {
+          setToast({
+            message: `${place.name} added to ${currentActiveTrip.name}!`,
+            type: "success"
+          });
+          await syncTripsAndActive();
+        } else if (resp.status === 409) {
+          setToast({ message: `${place.name} is already in your trip!`, type: "warning" });
+        } else if (resp.status === 403 || resp.status === 404) {
+          setToast({ message: "Trip not accessible for this account. Pick another active trip.", type: "error" });
+          storage.setActiveTrip(null);
+          setActiveTrip(null);
+          await syncTripsAndActive();
+        } else {
+          setToast({ message: "Failed to add place to trip.", type: "error" });
+        }
+      } catch (err) {
+        console.error("Error adding place to trip:", err);
+        setToast({ message: "Failed to add place to trip.", type: "error" });
+      }
     } else {
-      setToast({
-        message: `${place.name} is already in your trip!`,
-        type: 'warning'
-      });
-    }
-  }, []);
+      const success = storage.addPlaceToTrip(currentActiveTrip.id, place);
 
-  const clearFilters = () => {
+      if (success) {
+        setToast({
+          message: `${place.name} added to ${currentActiveTrip.name}!`,
+          type: "success"
+        });
+        setActiveTrip(storage.getActiveTrip());
+      } else {
+        setToast({
+          message: `${place.name} is already in your trip!`,
+          type: "warning"
+        });
+      }
+    }
+  }, [activeTrip, isAuthenticated, syncTripsAndActive]);
+const clearFilters = () => {
     setSelectedCategory('All');
     setSelectedCity('All');
     setMinRating(0);

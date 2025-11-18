@@ -3,6 +3,19 @@ import { StarIcon, MapPinIcon, CurrencyDollarIcon } from '@heroicons/react/24/so
 import { PlusIcon } from '@heroicons/react/24/outline';
 
 const PlaceCard = ({ place, onAddToTrip, showAddButton = true }) => {
+  const apiBase = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+  const getImageSrc = () => {
+    const url =
+      place.imageUrl ||
+      place.image_url ||
+      place.image ||
+      '';
+    if (!url) return 'https://via.placeholder.com/400x250?text=No+Image';
+    if (url.startsWith('http')) return url;
+    // Prefix relative paths with backend origin
+    return `${apiBase}${url.startsWith('/') ? '' : '/'}${url}`;
+  };
+
   const getPriceLevelText = (level) => {
     return '$'.repeat(level);
   };
@@ -17,7 +30,7 @@ const PlaceCard = ({ place, onAddToTrip, showAddButton = true }) => {
       <div className="relative overflow-hidden">
         <Link to={`/place/${place.id}`}>
           <img
-            src={place.imageUrl}
+            src={getImageSrc()}
             alt={place.name}
             className="w-full h-48 object-cover transition-transform duration-500 group-hover:scale-110"
           />
