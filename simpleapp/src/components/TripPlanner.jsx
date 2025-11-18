@@ -59,7 +59,12 @@ const TripPlanner = () => {
 
       if (response.ok) {
         const data = await response.json();
-        setTrips(data);
+        // Ensure all trips have createdAt field
+        const tripsWithDates = data.map(trip => ({
+          ...trip,
+          createdAt: trip.createdAt || trip.created_at || new Date().toISOString()
+        }));
+        setTrips(tripsWithDates);
       } else {
         loadTrips();
       }
@@ -101,10 +106,12 @@ const TripPlanner = () => {
           setShowCreateForm(false);
 
           if (trips.length === 0) {
-            handleSetActiveTrip(newTrip.id);
+            storage.setActiveTrip(newTrip.id);
+            setActiveTripState(newTrip);
+            showToast(`Trip created and set as active!`);
+          } else {
+            showToast('Trip created successfully!');
           }
-
-          showToast('Trip created successfully!');
         } else {
           showToast('Failed to create trip', 'error');
         }
@@ -124,10 +131,12 @@ const TripPlanner = () => {
       setShowCreateForm(false);
 
       if (trips.length === 0) {
-        handleSetActiveTrip(newTrip.id);
+        storage.setActiveTrip(newTrip.id);
+        setActiveTripState(newTrip);
+        showToast(`Trip created and set as active!`);
+      } else {
+        showToast('Trip created successfully!');
       }
-
-      showToast('Trip created successfully!');
     }
   };
 
@@ -504,10 +513,12 @@ const TripPlanner = () => {
                       <MapPinIcon className="h-4 w-4 mr-1" />
                       {trip.places?.length || 0} destinations
                     </span>
-                    <span className="flex items-center">
-                      <CalendarIcon className="h-4 w-4 mr-1" />
-                      Created {new Date(trip.createdAt).toLocaleDateString()}
-                    </span>
+                    {trip.createdAt && (
+                      <span className="flex items-center">
+                        <CalendarIcon className="h-4 w-4 mr-1" />
+                        Created {new Date(trip.createdAt).toLocaleDateString()}
+                      </span>
+                    )}
                   </div>
                 </div>
 
